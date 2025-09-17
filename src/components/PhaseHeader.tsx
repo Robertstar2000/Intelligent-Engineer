@@ -1,11 +1,12 @@
 import React from 'react';
-import { CheckCircle, Clock, Circle } from 'lucide-react';
+import { CheckCircle, Clock, Circle, Hourglass } from 'lucide-react';
 import { Badge } from './ui';
 
 const getStatusIcon = (status) => {
     switch (status) {
         case 'completed': return <CheckCircle className="w-5 h-5 text-green-500" />;
         case 'in-progress': return <Clock className="w-5 h-5 text-yellow-500" />;
+        case 'in-review': return <Hourglass className="w-5 h-5 text-blue-500" />;
         default: return <Circle className="w-5 h-5 text-gray-400" />;
     }
 };
@@ -17,7 +18,7 @@ export const PhaseHeader = ({ phase, disciplines }) => (
                 {getStatusIcon(phase.status)}
                 <h1 className="text-2xl font-bold">{phase.name}</h1>
             </div>
-            <Badge variant={phase.status === 'completed' ? 'success' : phase.status === 'in-progress' ? 'warning' : 'default'}>
+            <Badge variant={phase.status === 'completed' ? 'success' : phase.status === 'in-progress' ? 'warning' : phase.status === 'in-review' ? 'info' : 'default'}>
                 {phase.status.replace('-', ' ')}
             </Badge>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle } from 'lucide-react';
+import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock } from 'lucide-react';
 import { PhaseView } from './src/components/PhaseView';
 import { Button, Card, Badge, ProgressBar } from './src/components/ui';
 import { HelpModal } from './src/components/HelpModal';
@@ -54,11 +54,15 @@ interface Phase {
   id: string;
   name: string;
   description: string;
-  status: 'not-started' | 'in-progress' | 'completed';
+  status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
   sprints: Sprint[];
   tuningSettings: TuningSettings;
   output?: string;
   isEditable: boolean;
+  designReview?: {
+    required: boolean;
+    checklist: { id: string; text: string; checked: boolean }[];
+  };
 }
 
 interface Sprint {
@@ -159,13 +163,34 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
     onProjectCreated({
       id: Date.now().toString(), ...projectData, currentPhase: 0, createdAt: new Date(),
       phases: [
-        { id: '1', name: 'Requirements', description: 'Define clear functional and performance objectives', status: 'not-started', sprints: [{ id: '1-1', name: 'Requirements Analysis', description: 'Define detailed requirements', status: 'not-started', deliverables: [] }], tuningSettings: { detailLevel: 75, constraintWeight: 60, riskTolerance: 50, complianceStrictness: 80 }, isEditable: true },
-        { id: '2', name: 'Preliminary Design', description: 'Create initial design concepts and balance trade-offs', status: 'not-started', sprints: [{ id: '2-1', name: 'Concept Development', description: 'Generate high-level design concepts', status: 'not-started', deliverables: [] }], tuningSettings: { creativity: 80, costOptimization: 50, performanceBias: 70, modularity: 60 }, isEditable: true },
-        { id: '3', name: 'Critical Design', description: 'Develop a detailed, comprehensive design specification and implementation sprints', status: 'not-started', sprints: [], tuningSettings: { technicalDepth: 90, failureAnalysis: 70, manufacturability: 60, standardsAdherence: 85 }, isEditable: true },
-        { id: '4', name: 'Testing', description: 'Develop a comprehensive test plan', status: 'not-started', sprints: [], tuningSettings: { coverage: 90, edgeCaseFocus: 75, automationPriority: 80, destructiveTesting: 40 }, isEditable: false },
-        { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: false },
-        { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: false },
-        { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: false }
+        { id: '1', name: 'Requirements', description: 'Define clear functional and performance objectives', status: 'not-started', 
+            sprints: [
+                { id: '1-1', name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.', status: 'not-started', deliverables: [], output: '' },
+                { id: '1-2', name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.', status: 'not-started', deliverables: [], output: '' },
+                { id: '1-3', name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.', status: 'not-started', deliverables: [], output: '' },
+            ], 
+            tuningSettings: { detailLevel: 75, constraintWeight: 60, riskTolerance: 50, complianceStrictness: 80 }, isEditable: true, designReview: { required: false, checklist: [] } 
+        },
+        { 
+            id: '2', name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies', status: 'not-started', 
+            sprints: [
+                { id: '2-1', name: 'Conceptual Design Options', description: 'Generate several distinct high-level design concepts to address the project requirements.', status: 'not-started', deliverables: [], output: '' },
+                { id: '2-2', name: 'Trade Study Analysis', description: 'Conduct a formal trade study to compare the generated concepts against weighted criteria and select the optimal path forward.', status: 'not-started', deliverables: [], output: '' },
+            ], 
+            tuningSettings: { creativity: 80, costOptimization: 50, performanceBias: 70, modularity: 60 }, isEditable: true, designReview: { required: true, checklist: [] } 
+        },
+        { id: '3', name: 'Critical Design', description: 'Develop a detailed, comprehensive design specification and implementation sprints', status: 'not-started', sprints: [], tuningSettings: { technicalDepth: 90, failureAnalysis: 70, manufacturability: 60, standardsAdherence: 85 }, isEditable: true, designReview: { required: true, checklist: [] } },
+        { 
+            id: '4', name: 'Testing', description: 'Develop formal Verification and Validation plans', status: 'not-started', 
+            sprints: [
+                { id: '4-1', name: 'Verification Plan', description: 'Define tests to confirm the system is built correctly to specifications ("Are we building the product right?").', status: 'not-started', deliverables: [], output: '' },
+                { id: '4-2', name: 'Validation Plan', description: 'Define tests to confirm the system meets user needs and requirements ("Are we building the right product?").', status: 'not-started', deliverables: [], output: '' },
+            ], 
+            tuningSettings: { coverage: 90, edgeCaseFocus: 75, automationPriority: 80, destructiveTesting: 40 }, isEditable: true, designReview: { required: false, checklist: [] } 
+        },
+        { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: false, designReview: { required: false, checklist: [] } },
+        { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: false, designReview: { required: false, checklist: [] } },
+        { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: false, designReview: { required: false, checklist: [] } }
       ]
     });
   };
@@ -334,9 +359,12 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme })
     switch (status) {
       case 'completed': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'in-progress': return <Clock className="w-5 h-5 text-yellow-500" />;
+      case 'in-review': return <Hourglass className="w-5 h-5 text-blue-500" />;
       default: return <Circle className="w-5 h-5 text-gray-400 dark:text-gray-500" />;
     }
   };
+
+  const firstIncompleteIndex = project.phases.findIndex(p => p.status !== 'completed');
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -364,22 +392,29 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme })
       <div className="mt-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Project Lifecycle</h2>
         <div className="space-y-3">
-          {project.phases.map((phase, index) => (
-            <button key={phase.id} onClick={() => onSelectPhase(index)} className="w-full text-left">
-              <Card className="hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    {getStatusIcon(phase.status)}
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{phase.name}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{phase.description}</p>
+          {project.phases.map((phase, index) => {
+            const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
+            return (
+              <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked} className="w-full text-left disabled:opacity-60 disabled:cursor-not-allowed">
+                <Card className={isLocked ? 'bg-gray-100 dark:bg-gray-800/50' : 'hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20'}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      {getStatusIcon(phase.status)}
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{phase.name}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{phase.description}</p>
+                      </div>
                     </div>
+                     {isLocked ? (
+                        <Lock className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                    ) : (
+                        <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                    )}
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                </div>
-              </Card>
-            </button>
-          ))}
+                </Card>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -21,7 +21,7 @@ const md = new Remarkable({
     },
 });
 
-export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading }) => {
+export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutput, setEditedOutput] = useState(phase.output || '');
 
@@ -65,7 +65,7 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading }) => {
                         <div className="flex justify-between items-center">
                             <h4 className="font-semibold dark:text-white">Generated Content</h4>
                             <div className="flex space-x-2">
-                                {!isEditing && (
+                                {!isEditing && isEditable && (
                                     <>
                                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                                             <Edit3 className="mr-2 w-4 h-4" />Edit

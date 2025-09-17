@@ -29,19 +29,25 @@ Welcome! This guide provides everything you need to know to effectively use the 
 
 -   The **Dashboard** gives you a high-level overview of your project.
 -   You can review your requirements, constraints, and disciplines.
--   The **Project Lifecycle** section lists all phases. Click on any phase to start working on it.
--   Use the **"View Documents"** button to see all generated files.
+-   The **Project Lifecycle** section lists all phases. Click on a phase to begin work. Note that phases are locked until the previous one is completed.
 
 ### Step 3: Generate Phase Documentation
 
-1.  Select a phase from the dashboard to go to the **Phase View**.
-2.  **Adjust Tuning Controls**: Before generating, review the sliders. These parameters guide the AI. For example, for a "Preliminary Design" phase, you might increase "Creativity". For "Critical Design", you might increase "Technical Depth".
-3.  **Generate Output**: Click the **"Generate Output with AI"** button. The application will send your project details and tuning settings to the AI.
-4.  **Review and Edit**: The generated document will appear in the **Phase Output** card.
-    *   You can read the rendered Markdown.
-    *   Click **"Edit"** to make manual changes in a text editor. Save your changes when done.
-    *   Click **"Regenerate"** if you're not satisfied with the output. You can adjust the tuning controls before regenerating for a different result.
-5.  **Mark Complete**: Once you are satisfied with the output for a phase, click **"Mark Phase Complete"**. This locks in the content, which will then be used as context for the *next* phase you generate.
+The process varies slightly depending on the phase's complexity.
+
+#### A) Multi-Document Phases (Requirements, Preliminary Design, Testing)
+These phases require you to generate a series of distinct documents to complete them.
+1. Select the phase from the dashboard.
+2. In the **"Required Documents"** card, you will see a list of documents (e.g., "Project Scope", "Trade Study Analysis", "Verification Plan").
+3. Click **"Generate Document"** for each one. Note that some documents use previous ones in the same phase as context (e.g., the Trade Study uses the Conceptual Designs).
+4. Once all documents are generated, the **"Mark Phase Complete"** button (or "Commit for Design Review") will become active. Clicking it will merge all the documents into a single output file for that phase.
+
+#### B) Standard Phases (Launch, Operation, etc.)
+1.  Select a phase from the dashboard.
+2.  **Adjust Tuning Controls**: Review the sliders to guide the AI.
+3.  **Generate Output**: Click the **"Generate Output with AI"** button.
+4.  **Review and Edit**: The generated document will appear in the **Phase Output** card. You can edit, save, or regenerate as needed.
+5.  **Mark Complete**: Once you are satisfied, click **"Mark Phase Complete"**.
 
 ### Step 4: Manage and Download Documents
 
@@ -50,23 +56,20 @@ Welcome! This guide provides everything you need to know to effectively use the 
 -   Click **"Download .md"** to get a single file.
 -   Click **"Download All as .zip"** to get a complete archive of your project documentation.
 
-## 3. Understanding HMAP
+## 3. Best-in-Class Engineering Workflows
 
-**HMAP** stands for **Human-Mediated Agentic Process**. It's the core philosophy behind this tool, designed to advance human-AI collaboration. Instead of the AI working autonomously, you are always in control.
+This tool has several professional engineering processes built directly into the workflow.
 
-### How HMAP Works in this App
+-   **Trade Studies (Preliminary Design)**: This phase requires you to first generate multiple **Conceptual Design Options**. You then generate a **Trade Study Analysis** where the AI formally compares the concepts against weighted criteria to help you make a data-driven decision.
+-   **DFMA & FMEA (Critical Design)**: When you initiate the "Critical Design" phase, the AI is required to create a **Design for Manufacturing and Assembly (DFMA)** sprint, ensuring you consider production early. The mandatory **Design Review** for this phase will have the AI act as a Principal Engineer, checking for both DFMA principles and a **Failure Modes and Effects Analysis (FMEA)**.
+-   **Verification & Validation (Testing)**: The "Testing" phase is split into two required documents:
+    *   **Verification Plan**: Confirms you built the product correctly according to the design specifications.
+    *   **Validation Plan**: Confirms you built the right product that meets the user's needs.
 
-1.  **Define Research Domain**: You collaborate with the AI to establish the scope, boundaries, and objectives for your project by providing detailed requirements and constraints.
-2.  **Systematic Collaboration**: You work through structured workflows (the project phases) with AI assistance, while maintaining human oversight at key decision points (reviewing, editing, and approving generated content).
-3.  **Quality Assurance**: Comprehensive validation and documentation, managed by you, ensure the integrity and reproducibility of the project deliverables.
-
-HMAP ensures that the AI acts as a powerful assistant, augmenting your expertise rather than replacing it.
-
-## 4. Tips for Real Engineering Projects
+## 4. Tips for Success
 
 -   **Garbage In, Garbage Out**: The quality of the AI's output is highly dependent on the quality of your input. Write clear, detailed, and unambiguous requirements and constraints.
 -   **Iterate**: Don't expect the first generated output to be perfect. Use the "Regenerate" button and adjust tuning controls. Think of it as a brainstorming session with your AI partner.
 -   **Use the Edit Function**: The AI provides a strong first draft. Use the edit feature to refine the details, add specific proprietary information, and ensure it meets your organization's standards.
 -   **Context is Key**: Remember that each new phase generation uses the *most recently completed* phase as context. Ensure a phase is truly complete and accurate before marking it as such.
--   **Critical Design Sprints**: The "Critical Design" phase is special. It first generates a preliminary specification and a list of implementation sprints. You must then generate the technical details for each sprint and "merge" them into the main document to complete the phase. This models a real-world agile development process.
 `;
