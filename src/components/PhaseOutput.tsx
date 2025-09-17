@@ -5,6 +5,8 @@ import { Remarkable } from 'remarkable';
 
 declare const Prism: any;
 
+const API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+
 const md = new Remarkable({
     html: true,
     linkify: true,
@@ -24,6 +26,7 @@ const md = new Remarkable({
 export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutput, setEditedOutput] = useState(phase.output || '');
+    const hasApiKey = Boolean(API_KEY);
 
     useEffect(() => {
         setEditedOutput(phase.output || '');
@@ -52,7 +55,7 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading }) => {
                 {!phase.output ? (
                     <div className="text-center py-8">
                         <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
-                        <Button onClick={onGenerate} disabled={!process.env.API_KEY || isLoading}>
+                        <Button onClick={onGenerate} disabled={!hasApiKey || isLoading}>
                             {isLoading ? (
                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>
                             ) : (
@@ -70,7 +73,7 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading }) => {
                                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                                             <Edit3 className="mr-2 w-4 h-4" />Edit
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={onGenerate} disabled={!process.env.API_KEY || isLoading}>
+                                        <Button variant="outline" size="sm" onClick={onGenerate} disabled={!hasApiKey || isLoading}>
                                             {isLoading ? (
                                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>Regenerating...</>
                                             ) : (

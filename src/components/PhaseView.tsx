@@ -13,6 +13,28 @@ import { Button, Card, Badge } from './ui';
 
 declare const Prism: any;
 
+const API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+
+const CRITICAL_DESIGN_SECTION_GUIDANCE = `The Markdown specification must contain rich, project-specific content for the following sections in this exact order:
+1. Executive Summary
+2. System Architecture & Detailed Schematics (include ASCII/electrical/mechanical schematic callouts and reference designators)
+3. Parametric 3D Model Definition (include executable CAD code such as OpenSCAD, SolidPython, or a discipline-appropriate DSL)
+4. Manufacturing Drawings & Dimensioned Views (include tabulated key dimensions and tolerances)
+5. System Flow Diagram (include a mermaid code block for the flow or sequence diagram)
+6. IDE-Ready Implementation Workspace (include at least one fully syntax-highlighted code block implementing critical logic or firmware)
+7. Bill of Materials
+8. Risk, Safety & Compliance Considerations
+9. Verification & Validation Plan
+Each section should reference the selected engineering disciplines and the specific project details.`;
+
+const CRITICAL_DESIGN_DEFAULT_DELIVERABLES = [
+    'Detailed schematics package updated for the sprint scope',
+    'Parametric 3D model source file or script (e.g., OpenSCAD, CAD API)',
+    'Manufacturing drawing set with dimensions and tolerances',
+    'System flow diagram provided as a mermaid definition',
+    'IDE-ready source code or firmware module aligned to the sprint objectives'
+];
+
 const md = new Remarkable({
     html: true, linkify: true, typographer: true,
     highlight: function (str, lang) {
@@ -29,6 +51,8 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project }) =
     const [generationError, setGenerationError] = useState('');
     const [editingSprintId, setEditingSprintId] = useState(null);
     const [editedSprintOutput, setEditedSprintOutput] = useState('');
+
+    const hasApiKey = Boolean(API_KEY);
 
     useEffect(() => {
         if (typeof Prism !== 'undefined') {
@@ -49,13 +73,20 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project }) =
     const generateCriticalDesignInitialOutput = async () => {
         setIsLoading(true);
         setGenerationError('');
+        if (!hasApiKey) {
+            setGenerationError('An API key is required. Please set the GEMINI_API_KEY (or API_KEY) environment variable.');
+            setIsLoading(false);
+            return;
+        }
         try {
             const disciplineText = disciplines.length > 0 ? disciplines.join(', ') : 'General Engineering';
             const systemInstruction = `You are an expert AI engineering assistant. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints.
-1. Create a comprehensive preliminary design specification in Markdown format.
-2. Define a list of 2-4 distinct development sprints required to implement the design. Each sprint should have a clear name and a concise description of its goal.
-3. Provide the output in a structured JSON format.`;
-            
+${CRITICAL_DESIGN_SECTION_GUIDANCE}
+Return a structured JSON payload with:
+- "preliminarySpec": Markdown text that fully populates every section listed above with design decisions, calculations, schematics expressed with Unicode or ASCII where needed, a \`mermaid\` diagram, and an executable CAD code block for 3D modelling.
+- "sprints": an array of 2-4 sprints. Each sprint must include a "name", "description", and a "deliverables" array describing tangible outputs such as schematics packages, 3D models, flow diagrams, or IDE-ready source code.
+Ensure all recommendations align with the engineering disciplines and project context.`;
+
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplineText}
 ### Project Requirements:
@@ -67,9 +98,9 @@ ${project?.constraints || 'Not specified'}
 ### Description: ${phase.description}
 
 ## Task:
-Generate the preliminary design specification and a list of development sprints based on the project details.`;
+Generate the preliminary design specification and a list of development sprints based on the project details. The specification must include actionable guidance for producing schematics, 3D assets, detailed drawings, flow diagrams, and IDE-like code artifacts tailored to the disciplines.`;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
@@ -90,6 +121,11 @@ Generate the preliminary design specification and a list of development sprints 
                                     properties: {
                                         name: { type: Type.STRING },
                                         description: { type: Type.STRING },
+                                        deliverables: {
+                                            type: Type.ARRAY,
+                                            items: { type: Type.STRING },
+                                            description: "List of concrete sprint deliverables tied to schematics, 3D assets, flow diagrams, and code artifacts.",
+                                        },
                                     },
                                 },
                             },
@@ -98,13 +134,32 @@ Generate the preliminary design specification and a list of development sprints 
                 },
             });
 
-            const resultJson = JSON.parse(response.text);
+            const rawText = response.text?.trim();
+            if (!rawText) {
+                throw new Error('The AI response was empty. Please try again.');
+            }
+
+            let resultJson;
+            try {
+                resultJson = JSON.parse(rawText);
+            } catch (error) {
+                console.error('Invalid JSON response for critical design generation:', rawText, error);
+                throw new Error('The AI response was not valid JSON. Please try again.');
+            }
+
+            if (!resultJson.preliminarySpec) {
+                throw new Error('The AI response did not contain a preliminary specification.');
+            }
+            if (!Array.isArray(resultJson.sprints) || resultJson.sprints.length === 0) {
+                throw new Error('The AI response did not include any development sprints.');
+            }
+
             const newSprints = resultJson.sprints.map((s, index) => ({
                 id: `${phase.id}-${index + 1}`,
                 name: s.name,
                 description: s.description,
                 status: 'not-started',
-                deliverables: [],
+                deliverables: Array.isArray(s.deliverables) && s.deliverables.length > 0 ? s.deliverables : [...CRITICAL_DESIGN_DEFAULT_DELIVERABLES],
                 output: '',
             }));
 
@@ -120,18 +175,29 @@ Generate the preliminary design specification and a list of development sprints 
             setIsLoading(false);
         }
     };
-
     const generateSprintOutput = async (sprintId) => {
         setLoadingSprint(sprintId);
         setGenerationError('');
         try {
             const sprint = phase.sprints.find(s => s.id === sprintId);
             if (!sprint) return;
-            
+            if (!hasApiKey) {
+                setGenerationError('An API key is required. Please set the GEMINI_API_KEY (or API_KEY) environment variable.');
+                setLoadingSprint(null);
+                return;
+            }
+
             const systemInstruction = `You are an expert AI engineering assistant. Your task is to generate a detailed technical-only specification for a specific development sprint.
-1. Use the main preliminary design specification as context.
-2. Focus only on the technical details required to complete the sprint objective.
-3. Format the output in Markdown, including code blocks, diagrams, or tables where appropriate.`;
+Use the preliminary design specification as context and deliver actionable guidance that progresses the required artefacts.
+The Markdown you return must contain clearly labeled sections for:
+- Sprint Objective Recap
+- Detailed Task Breakdown
+- Schematics or Circuit/Assembly Details (include ASCII art, netlists, or tables)
+- 3D Model or CAD Instructions (include executable OpenSCAD/SolidPython/etc. code blocks where feasible)
+- Manufacturing Drawings & Critical Dimensions (tables and callouts)
+- Flow Diagram (a mermaid code block capturing system logic or control flow)
+- IDE Workspace (language-tagged code block implementing or testing the sprint output)
+Only include technical content; omit management commentary.`;
 
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplines.join(', ')}
@@ -152,16 +218,21 @@ ${phase.output}
 
 ## Task:
 Generate the detailed technical specification in Markdown for this sprint.`;
-            
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+            const ai = new GoogleGenAI({ apiKey: API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
                 config: { systemInstruction }
             });
 
-            const updatedSprints = phase.sprints.map(s => 
-                s.id === sprintId ? { ...s, output: response.text, status: 'in-progress' } : s
+            const sprintOutput = response.text?.trim();
+            if (!sprintOutput) {
+                throw new Error('The AI response was empty. Please try again.');
+            }
+
+            const updatedSprints = phase.sprints.map(s =>
+                s.id === sprintId ? { ...s, output: sprintOutput, status: 'in-progress' } : s
             );
             onUpdatePhase(phase.id, { sprints: updatedSprints });
 
@@ -172,7 +243,6 @@ Generate the detailed technical specification in Markdown for this sprint.`;
             setLoadingSprint(null);
         }
     };
-
     const handleMergeSprint = (sprintId) => {
         const sprint = phase.sprints.find(s => s.id === sprintId);
         if (!sprint || !sprint.output) return;
@@ -205,8 +275,8 @@ Generate the detailed technical specification in Markdown for this sprint.`;
             return;
         }
 
-        if (!process.env.API_KEY) {
-            setGenerationError('API key is required. Please set the API_KEY environment variable.');
+        if (!hasApiKey) {
+            setGenerationError('An API key is required. Please set the GEMINI_API_KEY (or API_KEY) environment variable.');
             return;
         }
         setIsLoading(true);
@@ -259,14 +329,17 @@ Generate the complete engineering documentation in Markdown format for the **${p
                 throw new Error(`The generated prompt is too long (${userPrompt.length} characters), exceeding the ${MAX_PROMPT_CHARACTERS} character limit. Please try to shorten project requirements, constraints, or the output from the previous phase.`);
             }
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
                 config: { systemInstruction: systemInstruction }
             });
 
-            const text = response.text;
+            const text = response.text?.trim();
+            if (!text) {
+                throw new Error('The AI response was empty. Please try again.');
+            }
             onUpdatePhase(phase.id, { output: text, status: 'in-progress' });
         } catch (error) {
             console.error('Failed to generate output:', error);
@@ -298,7 +371,7 @@ Generate the complete engineering documentation in Markdown format for the **${p
         return (
             <div className="space-y-6">
                 <PhaseHeader phase={phase} disciplines={disciplines} />
-                {!process.env.API_KEY && <ApiKeyWarning />}
+                {!hasApiKey && <ApiKeyWarning />}
                 {generationError && <GenerationError message={generationError} />}
 
                 <TuningControls settings={phase.tuningSettings} onChange={handleUpdateTuning} />
@@ -306,7 +379,7 @@ Generate the complete engineering documentation in Markdown format for the **${p
                 <Card title={allSprintsDone ? "Final Design Specification" : "Preliminary Design Specification"} description={!phase.output ? "Generate a spec and sprints to begin." : "This document will be updated as you complete sprints."}>
                     {!phase.output ? (
                          <div className="text-center py-8">
-                             <Button onClick={generateOutput} disabled={!process.env.API_KEY || isLoading}>
+                             <Button onClick={generateOutput} disabled={!hasApiKey || isLoading}>
                                  {isLoading ? ( <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</> ) : 
                                  ( <><Sliders className="mr-2 w-4 h-4" />Generate Spec & Sprints</> )}
                              </Button>
@@ -330,7 +403,7 @@ Generate the complete engineering documentation in Markdown format for the **${p
                                     </div>
                                     <div className="mt-4">
                                         {!sprint.output && (
-                                            <Button size="sm" onClick={() => generateSprintOutput(sprint.id)} disabled={!process.env.API_KEY || loadingSprint === sprint.id}>
+                                            <Button size="sm" onClick={() => generateSprintOutput(sprint.id)} disabled={!hasApiKey || loadingSprint === sprint.id}>
                                                 {loadingSprint === sprint.id ? (<><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>) : (<><Play className="mr-2 w-4 h-4" />Generate Spec</>)}
                                             </Button>
                                         )}
@@ -353,6 +426,16 @@ Generate the complete engineering documentation in Markdown format for the **${p
                                             </div>
                                         )}
                                     </div>
+                                    {sprint.deliverables && sprint.deliverables.length > 0 && (
+                                        <div className="mt-4 bg-gray-100 dark:bg-gray-800/60 rounded-md p-3">
+                                            <h5 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Expected Deliverables</h5>
+                                            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                                {sprint.deliverables.map((deliverable, idx) => (
+                                                    <li key={`${sprint.id}-deliverable-${idx}`}>{deliverable}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -373,7 +456,7 @@ Generate the complete engineering documentation in Markdown format for the **${p
         <div className="space-y-6">
             <PhaseHeader phase={phase} disciplines={disciplines} />
 
-            {!process.env.API_KEY && <ApiKeyWarning />}
+            {!hasApiKey && <ApiKeyWarning />}
             {generationError && <GenerationError message={generationError} />}
 
             <TuningControls settings={phase.tuningSettings} onChange={handleUpdateTuning} />

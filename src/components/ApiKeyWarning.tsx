@@ -11,7 +11,7 @@ export const ApiKeyWarning = () => (
       <div className="ml-3">
         <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">API Key Not Found</h3>
         <div className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
-          <p>Please ensure the API_KEY environment variable is set to enable AI-powered content generation.</p>
+          <p>Please set the GEMINI_API_KEY (or API_KEY) environment variable in your .env.local file and restart the app to enable AI-powered content generation.</p>
         </div>
       </div>
     </div>
