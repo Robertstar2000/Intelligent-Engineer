@@ -29,7 +29,7 @@ The application is a single-page application (SPA) built with React that manages
 4.  **Phase View (`PhaseView`)**: This is the primary interaction view for the AI. The behavior of this view changes depending on the phase:
     -   **Multi-Document Phases (Requirements, Preliminary Design, Testing)**: These phases are broken down into required sub-documents (e.g., "Project Scope" and "SOW" for Requirements; "Conceptual Design Options" and "Trade Study Analysis" for Preliminary Design; "Verification Plan" and "Validation Plan" for Testing). The user must generate each document individually. The phase is completed by merging all sub-documents into a single output file.
     -   **Sprint-Based Phase (Critical Design)**: This phase has a two-step generation process.
-        1.  First, the user generates a high-level "Preliminary Design Specification" and a list of AI-defined implementation sprints. The AI is required to include a "Design for Manufacturing and Assembly (DFMA)" sprint.
+        1.  First, the user generates a high-level "Preliminary Design Specification" and a list of AI-defined implementation sprints. The AI is required to include both a **"Design for Manufacturing and Assembly (DFMA)"** sprint and a **"Failure Modes and Effects Analysis (FMEA)"** sprint.
         2.  The user then generates the technical details for each sprint individually.
         3.  Completed sprints are merged into the main specification document.
     -   **Standard Phases (Launch, Operation, Improvement)**: These phases generate a single, comprehensive document.

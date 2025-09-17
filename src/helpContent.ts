@@ -61,7 +61,7 @@ These phases require you to generate a series of distinct documents to complete 
 This tool has several professional engineering processes built directly into the workflow.
 
 -   **Trade Studies (Preliminary Design)**: This phase requires you to first generate multiple **Conceptual Design Options**. You then generate a **Trade Study Analysis** where the AI formally compares the concepts against weighted criteria to help you make a data-driven decision.
--   **DFMA & FMEA (Critical Design)**: When you initiate the "Critical Design" phase, the AI is required to create a **Design for Manufacturing and Assembly (DFMA)** sprint, ensuring you consider production early. The mandatory **Design Review** for this phase will have the AI act as a Principal Engineer, checking for both DFMA principles and a **Failure Modes and Effects Analysis (FMEA)**.
+-   **DFMA & FMEA (Critical Design)**: When you initiate the "Critical Design" phase, the AI is required to create two specific sprints: a **Design for Manufacturing and Assembly (DFMA)** sprint to optimize for production, and a **Failure Modes and Effects Analysis (FMEA)** sprint to systematically identify and mitigate potential failures. The mandatory **Design Review** for this phase will then verify the comprehensiveness of these analyses.
 -   **Verification & Validation (Testing)**: The "Testing" phase is split into two required documents:
     *   **Verification Plan**: Confirms you built the product correctly according to the design specifications.
     *   **Validation Plan**: Confirms you built the right product that meets the user's needs.

@@ -93,18 +93,41 @@ const ENGINEERING_DISCIPLINES = [
 // --- VIEW COMPONENTS ---
 
 const LandingPage = ({ onStartProject, theme, setTheme }) => {
-  const phaseGroups = [
-    { title: 'Foundation', phases: ['Requirements', 'Research', 'Planning'], icon: <BookOpen className="w-6 h-6" />, color: 'from-blue-500 to-cyan-500' },
-    { title: 'Development', phases: ['Preliminary Design', 'Critical Design', 'Testing'], icon: <Wrench className="w-6 h-6" />, color: 'from-purple-500 to-pink-500' },
-    { title: 'Delivery', phases: ['Launch', 'Operate', 'Improve'], icon: <Rocket className="w-6 h-6" />, color: 'from-green-500 to-emerald-500' }
-  ];
+    const phaseGroups = [
+        { 
+            title: 'Foundation', 
+            phases: [
+                { name: 'Requirements', description: 'Define clear functional and performance objectives.' },
+                { name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies.' },
+            ], 
+            icon: <BookOpen className="w-6 h-6" />, color: 'from-blue-500 to-cyan-500' 
+        },
+        { 
+            title: 'Development', 
+            phases: [
+                { name: 'Critical Design', description: 'Develop the detailed, comprehensive design specification.' },
+                { name: 'Testing', description: 'Verify and validate that you built the right product, right.' },
+            ], 
+            icon: <Wrench className="w-6 h-6" />, color: 'from-purple-500 to-pink-500' 
+        },
+        { 
+            title: 'Delivery & Beyond', 
+            phases: [
+                { name: 'Launch', description: 'Formulate a detailed launch and deployment strategy.' },
+                { name: 'Operation', description: 'Create an operations and maintenance manual.' },
+                { name: 'Improvement', description: 'Identify and prioritize future improvements.' },
+            ], 
+            icon: <Rocket className="w-6 h-6" />, color: 'from-green-500 to-emerald-500' 
+        }
+    ];
 
   const features = [
     { title: 'AI-Powered Generation', description: 'Intelligent, context-aware engineering assistance tailored to your discipline', icon: <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">AI</div> },
     { title: 'Context Propagation', description: 'Full memory across all phases, ensuring continuity and consistency', icon: <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg flex items-center justify-center text-white">⚡</div> },
     { title: 'Domain Toolkits', description: 'Tools and outputs tailored to each supported engineering discipline', icon: <Wrench className="w-8 h-8 text-orange-500" /> },
     { title: 'Document Generation', description: 'Professional deliverables in multiple formats ready for download', icon: <Download className="w-8 h-8 text-purple-500" /> },
-    { title: 'HMAP Integration', description: 'Human-Mediated Agentic Process ensuring quality and oversight', icon: <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">H</div> }
+    { title: 'HMAP Integration', description: 'Human-Mediated Agentic Process ensuring quality and oversight', icon: <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">H</div> },
+    { title: 'Lean & Agile Process', description: 'Best-in-class, SpaceX-derived processes including sprints and a Minimum Viable Product focus. "The best part is no part."', icon: <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold">🚀</div> }
   ];
 
   return (
@@ -138,10 +161,19 @@ const LandingPage = ({ onStartProject, theme, setTheme }) => {
         <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">Engineering Workflow</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {phaseGroups.map((group, index) => (
-            <Card key={index} className="text-center">
-              <div className={`w-12 h-12 bg-gradient-to-r ${group.color} rounded-lg flex items-center justify-center text-white mx-auto mb-4`}>{group.icon}</div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">{group.title}</h3>
-              <div className="space-y-2">{group.phases.map((phase, phaseIndex) => <div key={phaseIndex} className="text-gray-600 dark:text-gray-400 text-sm">{phase}</div>)}</div>
+            <Card key={index}>
+              <div className="flex flex-col items-center text-center">
+                <div className={`w-12 h-12 bg-gradient-to-r ${group.color} rounded-lg flex items-center justify-center text-white mx-auto mb-4`}>{group.icon}</div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{group.title}</h3>
+              </div>
+              <div className="space-y-4 text-left">
+                {group.phases.map((phase, phaseIndex) => (
+                    <div key={phaseIndex}>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">{phase.name}</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{phase.description}</p>
+                    </div>
+                ))}
+              </div>
             </Card>
           ))}
         </div>
@@ -188,9 +220,9 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
             ], 
             tuningSettings: { coverage: 90, edgeCaseFocus: 75, automationPriority: 80, destructiveTesting: 40 }, isEditable: true, designReview: { required: false, checklist: [] } 
         },
-        { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: false, designReview: { required: false, checklist: [] } },
-        { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: false, designReview: { required: false, checklist: [] } },
-        { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: false, designReview: { required: false, checklist: [] } }
+        { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: true, designReview: { required: false, checklist: [] } },
+        { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: true, designReview: { required: false, checklist: [] } },
+        { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: true, designReview: { required: false, checklist: [] } }
       ]
     });
   };

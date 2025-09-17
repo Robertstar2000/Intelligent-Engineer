@@ -56,6 +56,7 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project }) =
     const [generationError, setGenerationError] = useState('');
     const [editingSprintId, setEditingSprintId] = useState(null);
     const [editedSprintOutput, setEditedSprintOutput] = useState('');
+    const [editedSprintDeliverablesText, setEditedSprintDeliverablesText] = useState('');
     const [loadingDocId, setLoadingDocId] = useState(null);
 
     useEffect(() => {
@@ -81,7 +82,7 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project }) =
             const disciplineText = disciplines.length > 0 ? disciplines.join(', ') : 'General Engineering';
             const systemInstruction = `You are an expert AI engineering assistant. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints.
 1. Create a comprehensive preliminary design specification in Markdown format.
-2. Define a list of 2-4 distinct development sprints required to implement the design. One of these sprints MUST be named 'Design for Manufacturing and Assembly (DFMA)' and should focus on optimizing the design for production. Each sprint should have a clear name and a concise description of its goal.
+2. Define a list of 3-5 distinct development sprints required to implement the design. Two of these sprints MUST be named 'Design for Manufacturing and Assembly (DFMA)' and 'Failure Modes and Effects Analysis (FMEA)'. The DFMA sprint should focus on optimizing the design for production. The FMEA sprint should focus on systematically identifying and mitigating potential failures. Each sprint should have a clear name and a concise description of its goal.
 3. Provide the output in a structured JSON format.`;
             
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
@@ -156,12 +157,32 @@ Generate the preliminary design specification and a list of development sprints 
             const sprint = phase.sprints.find(s => s.id === sprintId);
             if (!sprint) return;
             
-            const systemInstruction = `You are an expert AI engineering assistant. Your task is to generate a detailed technical specification and a list of key deliverables for a specific development sprint.
+            let systemInstruction = `You are an expert AI engineering assistant. Your task is to generate a detailed technical specification and a list of key deliverables for a specific development sprint.
 1. Use the main preliminary design specification as context.
 2. Focus only on the technical details required to complete the sprint objective.
 3. The technical specification should be in Markdown format, including code blocks, diagrams, or tables where appropriate.
 4. The deliverables should be a concise list of tangible outcomes or artifacts (e.g., "Updated API documentation for the user authentication endpoint", "A set of unit tests covering the new caching logic", "A schematic diagram for the power regulation circuit") that will be produced by the end of the sprint.
 5. Provide the output in a structured JSON format according to the provided schema.`;
+
+            if (sprint.name === 'Failure Modes and Effects Analysis (FMEA)') {
+                systemInstruction = `You are an expert AI reliability engineer. Your task is to generate a comprehensive Failure Modes and Effects Analysis (FMEA) document for a specific development sprint.
+1.  Use the main preliminary design specification as the primary context for identifying potential failure modes.
+2.  The technical specification must be a detailed FMEA table in Markdown format.
+3.  The FMEA table must include the following columns:
+    *   **Item/Function**: The component or process being analyzed.
+    *   **Potential Failure Mode**: How the item could fail to meet its intended function.
+    *   **Potential Effects of Failure**: The consequences of the failure.
+    *   **Severity (S)**: A rating of the seriousness of the effect (1-10).
+    *   **Potential Cause(s)**: The root cause of the failure.
+    *   **Occurrence (O)**: A rating of the likelihood that the failure will occur (1-10).
+    *   **Current Design Controls**: Existing methods to prevent or detect the failure.
+    *   **Detection (D)**: A rating of the likelihood that the failure will be detected before it reaches the end-user (1-10).
+    *   **Risk Priority Number (RPN)**: Calculated as S × O × D.
+    *   **Recommended Actions/Mitigation Strategies**: Specific actions to reduce the RPN, targeting high-risk items first.
+4.  Below the table, provide a brief explanation of the 1-10 rating scales used for Severity, Occurrence, and Detection.
+5.  The 'deliverables' should be a concise list of outcomes, such as "Completed FMEA document for review", "List of high-risk items requiring immediate action", and "Proposed design changes based on mitigation strategies".
+6.  Provide the output in a structured JSON format according to the provided schema.`;
+            }
 
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplines.join(', ')}
@@ -241,12 +262,14 @@ Generate the detailed technical specification and a list of key deliverables in 
     };
 
     const handleSaveSprint = () => {
-        const updatedSprints = phase.sprints.map(s => 
-            s.id === editingSprintId ? { ...s, output: editedSprintOutput } : s
+        const updatedDeliverables = editedSprintDeliverablesText.split('\n').filter(d => d.trim() !== '');
+        const updatedSprints = phase.sprints.map(s =>
+            s.id === editingSprintId ? { ...s, output: editedSprintOutput, deliverables: updatedDeliverables } : s
         );
         onUpdatePhase(phase.id, { sprints: updatedSprints });
         setEditingSprintId(null);
         setEditedSprintOutput('');
+        setEditedSprintDeliverablesText('');
     };
 
 
@@ -535,7 +558,7 @@ Generate the **${doc.name}** document based on the prompt below:
                 {!process.env.API_KEY && <ApiKeyWarning />}
                 {generationError && <GenerationError message={generationError} />}
                 
-                <Card title="Required Documents" description="Generate each foundational document to complete this phase.">
+                <Card title="Required Documents" description="Generate and edit each foundational document to complete this phase.">
                     <div className="space-y-6">
                         {phase.sprints.map(doc => (
                             <div key={doc.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -556,10 +579,35 @@ Generate the **${doc.name}** document based on the prompt below:
                                         </Button>
                                     ) : (
                                         <div className="space-y-4">
-                                            <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-72 overflow-y-auto prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(doc.output) }} />
-                                             <Button size="sm" variant="outline" onClick={() => generateSubDocument(doc.id)} disabled={loadingDocId === doc.id}>
-                                                {loadingDocId === doc.id ? (<><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Regenerating...</>) : (<><RefreshCw className="mr-2 w-4 h-4"/>Regenerate</>)}
-                                            </Button>
+                                            {editingSprintId === doc.id ? (
+                                                <div className="space-y-3">
+                                                    <textarea
+                                                        value={editedSprintOutput}
+                                                        onChange={(e) => setEditedSprintOutput(e.target.value)}
+                                                        className="w-full h-72 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+                                                    />
+                                                    <div className="flex space-x-2">
+                                                        <Button size="sm" onClick={handleSaveSprint}>
+                                                            <Save className="mr-2 w-4 h-4" />Save
+                                                        </Button>
+                                                        <Button variant="outline" size="sm" onClick={() => setEditingSprintId(null)}>
+                                                            Cancel
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-72 overflow-y-auto prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(doc.output) }} />
+                                                    <div className="flex space-x-2">
+                                                        <Button size="sm" variant="outline" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output); }}>
+                                                            <Edit3 className="mr-2 w-4 h-4"/>Edit
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" onClick={() => generateSubDocument(doc.id)} disabled={loadingDocId === doc.id}>
+                                                            {loadingDocId === doc.id ? (<><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Regenerating...</>) : (<><RefreshCw className="mr-2 w-4 h-4"/>Regenerate</>)}
+                                                        </Button>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -622,34 +670,60 @@ Generate the **${doc.name}** document based on the prompt below:
                                             </Button>
                                         ) : (
                                             <div className="space-y-4">
-                                                {sprint.deliverables && sprint.deliverables.length > 0 && (
-                                                    <div>
-                                                        <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300">Deliverables:</h5>
-                                                        <ul className="list-disc list-inside mt-1 text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                                            {sprint.deliverables.map((deliverable, index) => (
-                                                                <li key={index}>{deliverable}</li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )}
                                                 {editingSprintId === sprint.id ? (
-                                                    <div className="space-y-3">
-                                                        <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300">Technical Specification:</h5>
-                                                        <textarea value={editedSprintOutput} onChange={(e) => setEditedSprintOutput(e.target.value)} className="w-full h-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300 mb-2">Deliverables:</h5>
+                                                            <textarea
+                                                                value={editedSprintDeliverablesText}
+                                                                onChange={(e) => setEditedSprintDeliverablesText(e.target.value)}
+                                                                className="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+                                                                placeholder="One deliverable per line"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300 mb-2">Technical Specification:</h5>
+                                                            <textarea 
+                                                                value={editedSprintOutput} 
+                                                                onChange={(e) => setEditedSprintOutput(e.target.value)} 
+                                                                className="w-full h-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" 
+                                                            />
+                                                        </div>
                                                         <div className="flex space-x-2">
-                                                            <Button size="sm" onClick={handleSaveSprint}><Save className="mr-2 w-4 h-4" />Save</Button>
-                                                            <Button variant="outline" size="sm" onClick={() => setEditingSprintId(null)}>Cancel</Button>
+                                                            <Button size="sm" onClick={handleSaveSprint}><Save className="mr-2 w-4 h-4" />Save Changes</Button>
+                                                            <Button variant="outline" size="sm" onClick={() => {
+                                                                setEditingSprintId(null);
+                                                                setEditedSprintOutput('');
+                                                                setEditedSprintDeliverablesText('');
+                                                            }}>Cancel</Button>
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div>
-                                                        <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300 mb-2">Technical Specification:</h5>
-                                                        <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-72 overflow-y-auto prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(sprint.output) }} />
-                                                    </div>
+                                                    <>
+                                                        {sprint.deliverables && sprint.deliverables.length > 0 && (
+                                                            <div>
+                                                                <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300">Deliverables:</h5>
+                                                                <ul className="list-disc list-inside mt-1 text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                                    {sprint.deliverables.map((deliverable, index) => (
+                                                                        <li key={index}>{deliverable}</li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-300 mt-3 mb-2">Technical Specification:</h5>
+                                                            <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-72 overflow-y-auto prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(sprint.output) }} />
+                                                        </div>
+                                                    </>
                                                 )}
+
                                                 {sprint.status !== 'completed' && editingSprintId !== sprint.id && (
-                                                    <div className="flex space-x-2">
-                                                        <Button size="sm" variant="outline" onClick={() => { setEditingSprintId(sprint.id); setEditedSprintOutput(sprint.output); }}><Edit3 className="mr-2 w-4 h-4"/>Edit</Button>
+                                                    <div className="flex space-x-2 mt-4">
+                                                        <Button size="sm" variant="outline" onClick={() => { 
+                                                            setEditingSprintId(sprint.id); 
+                                                            setEditedSprintOutput(sprint.output); 
+                                                            setEditedSprintDeliverablesText((sprint.deliverables || []).join('\n'));
+                                                        }}><Edit3 className="mr-2 w-4 h-4"/>Edit</Button>
                                                         <Button size="sm" variant="outline" onClick={() => generateSprintOutput(sprint.id)} disabled={loadingSprint === sprint.id}><RefreshCw className="mr-2 w-4 h-4"/>Regenerate</Button>
                                                         <Button size="sm" onClick={() => handleMergeSprint(sprint.id)}><Combine className="mr-2 w-4 h-4" />Accept & Merge</Button>
                                                     </div>
