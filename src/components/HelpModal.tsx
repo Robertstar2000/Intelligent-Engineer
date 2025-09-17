@@ -8,7 +8,6 @@ declare const Prism: any;
 
 const md = new Remarkable({
     html: true,
-    linkify: true,
     typographer: true,
     highlight: function (str, lang) {
         if (lang && typeof Prism !== 'undefined' && Prism.languages[lang]) {
@@ -52,6 +51,8 @@ export const HelpModal = ({ onClose }) => {
             <Card 
                 className="w-full max-w-4xl h-[90vh] flex flex-col transform transition-all"
                 onClick={(e) => e.stopPropagation()} // Prevent closing when clicking on the card
+                noPadding={true}
+                flexBody={true}
             >
                 <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">Help & User Guide</h2>

@@ -7,7 +7,6 @@ declare const Prism: any;
 
 const md = new Remarkable({
     html: true,
-    linkify: true,
     typographer: true,
     highlight: function (str, lang) {
         if (lang && typeof Prism !== 'undefined' && Prism.languages[lang]) {

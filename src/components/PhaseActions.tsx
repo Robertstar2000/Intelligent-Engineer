@@ -7,7 +7,7 @@ export const PhaseActions = ({ phase, onMarkComplete, onDownload, isCompletable 
         <Button variant="outline" onClick={onDownload} disabled={isDownloadDisabled}>
             <Download className="mr-2 w-4 h-4" />Download Documentation
         </Button>
-        {phase.output && phase.status !== 'completed' && phase.status !== 'in-review' && (
+        {phase.status !== 'completed' && (
             <Button onClick={onMarkComplete} disabled={!isCompletable}>
                 {reviewRequired ? (
                     <>Commit for Design Review <CheckCircle className="ml-2 w-4 h-4" /></>

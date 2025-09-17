@@ -14,7 +14,7 @@ import { Button, Card, Badge } from './ui';
 declare const Prism: any;
 
 const md = new Remarkable({
-    html: true, linkify: true, typographer: true,
+    html: true, typographer: true,
     highlight: function (str, lang) {
         if (lang && typeof Prism !== 'undefined' && Prism.languages[lang]) {
             try { return Prism.highlight(str, Prism.languages[lang], lang); } catch (e) { console.error(e); }

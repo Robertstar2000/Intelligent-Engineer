@@ -12,8 +12,7 @@ export const Button = ({ children, onClick, variant = 'primary', size = 'md', di
   return <button className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`} onClick={onClick} disabled={disabled} {...props}>{children}</button>;
 };
 
-// FIX: Updated Card component to accept and spread additional props like onClick to resolve a type error in HelpModal.tsx.
-export const Card = ({ children, className = '', title, description, ...props }: { children: any, className?: string, title?: any, description?: any, [key: string]: any }) => (
+export const Card = ({ children, className = '', title, description, noPadding = false, flexBody = false, ...props }: { children: any, className?: string, title?: any, description?: any, noPadding?: boolean, flexBody?: boolean, [key: string]: any }) => (
   <div className={`bg-white dark:bg-gray-800/50 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 hover:shadow-xl transition-all duration-300 ${className}`} {...props}>
     {title && (
       <div className="p-6 pb-0">
@@ -21,7 +20,7 @@ export const Card = ({ children, className = '', title, description, ...props }:
         {description && <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{description}</p>}
       </div>
     )}
-    <div className="p-6">{children}</div>
+    <div className={`${noPadding ? '' : "p-6"} ${flexBody ? 'flex-1 flex flex-col min-h-0' : ''}`}>{children}</div>
   </div>
 );
 
