@@ -130,6 +130,23 @@ const LandingPage = ({ onStartProject, theme, setTheme }) => {
     { title: 'Lean & Agile Process', description: 'Best-in-class, SpaceX-derived processes including sprints and a Minimum Viable Product focus. "The best part is no part."', icon: <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold">🚀</div> }
   ];
 
+  const mificoColors = [
+      '#38bdf8', // sky-400
+      '#4ade80', // green-400
+      '#f472b6', // pink-400
+      '#facc15', // yellow-400
+      '#fb923c', // orange-400
+      '#c084fc', // purple-400
+  ];
+
+  const styledMifeco = (
+      <strong className="font-bold tracking-wider">
+          {'MIFECO'.split('').map((letter, index) => (
+              <span key={index} style={{ color: mificoColors[index] }}>{letter}</span>
+          ))}
+      </strong>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 dark:from-gray-900 dark:via-blue-900/50 dark:to-purple-900/50">
       <div className="absolute top-4 right-4 z-10">
@@ -142,6 +159,7 @@ const LandingPage = ({ onStartProject, theme, setTheme }) => {
             <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">Intelligent <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Engineering</span></h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">An AI-powered companion that guides you through the full lifecycle of engineering development using proven HMAP methodologies</p>
             <Button size="lg" onClick={onStartProject} className="text-lg px-8 py-4"><>Start New Project <ChevronRight className="ml-2 w-5 h-5" /></></Button>
+            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">This application created by {styledMifeco} a Mars Technology Institute (MTI) affiliate.</p>
           </div>
         </div>
       </div>
@@ -178,8 +196,11 @@ const LandingPage = ({ onStartProject, theme, setTheme }) => {
           ))}
         </div>
       </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+        <p className="text-lg text-gray-700 dark:text-gray-300">“This application provides real engineers with very rapid project planning and detailed documentation. It can also help provide training in project management and execution and help anyone who wants to run a successful project.”</p>
+      </div>
       <footer className="text-center py-8 text-sm text-gray-500 dark:text-gray-400">
-        Made by MIFECO
+        Made by {styledMifeco} @2025
       </footer>
     </div>
   );

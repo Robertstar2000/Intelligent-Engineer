@@ -1,6 +1,7 @@
 import React from 'react';
 
-export const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled = false, className = '', ...props }) => {
+// FIX: Added explicit types to props and made `children` optional to resolve type errors across the application.
+export const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled = false, className = '', ...props }: { children?: React.ReactNode; onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void; variant?: string; size?: string; disabled?: boolean; className?: string; [key: string]: any }) => {
   const baseClasses = 'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900';
   const variants = {
     primary: 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl focus:ring-blue-500',
@@ -12,7 +13,8 @@ export const Button = ({ children, onClick, variant = 'primary', size = 'md', di
   return <button className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`} onClick={onClick} disabled={disabled} {...props}>{children}</button>;
 };
 
-export const Card = ({ children, className = '', title, description, noPadding = false, flexBody = false, ...props }: { children: any, className?: string, title?: any, description?: any, noPadding?: boolean, flexBody?: boolean, [key: string]: any }) => (
+// FIX: Made `children` prop optional to fix type errors where it was incorrectly flagged as missing.
+export const Card = ({ children, className = '', title, description, noPadding = false, flexBody = false, ...props }: { children?: React.ReactNode, className?: string, title?: any, description?: any, noPadding?: boolean, flexBody?: boolean, [key: string]: any }) => (
   <div className={`bg-white dark:bg-gray-800/50 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 hover:shadow-xl transition-all duration-300 ${className}`} {...props}>
     {title && (
       <div className="p-6 pb-0">
@@ -24,7 +26,8 @@ export const Card = ({ children, className = '', title, description, noPadding =
   </div>
 );
 
-export const Badge = ({ children, variant = 'default' }) => {
+// FIX: Added explicit types to props and made `children` optional.
+export const Badge = ({ children, variant = 'default' }: { children?: React.ReactNode, variant?: string }) => {
   const variants = {
     default: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
     success: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
