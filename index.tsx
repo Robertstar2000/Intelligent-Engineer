@@ -89,6 +89,8 @@ const ENGINEERING_DISCIPLINES = [
   'Electronics Engineering', 'Manufacturing Engineering'
 ];
 
+const sanitizeFilename = (name: string): string => name.replace(/[\\/?%*:|"<>.\s]/g, '_');
+
 
 // --- VIEW COMPONENTS ---
 
@@ -305,20 +307,18 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
 const DocumentsPage = ({ project, onBack }) => {
   if (!project) return null;
 
-  const documents = project.phases.filter(phase => phase.output);
-
-  const downloadSingleFile = (phase) => {
-    const blob = new Blob([phase.output], { type: 'text/markdown;charset=utf-8' });
+  const downloadMarkdownFile = (content, fileName) => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.name.replace(/\s+/g, '_')}_${phase.name.replace(/\s+/g, '_')}.md`;
+    link.download = `${sanitizeFilename(fileName)}.md`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-
+  
   const downloadAllAsZip = async () => {
     const JSZip = (window as any).JSZip;
     if (!JSZip) {
@@ -327,7 +327,6 @@ const DocumentsPage = ({ project, onBack }) => {
     }
     const zip = new JSZip();
 
-    // Create a summary file
     const summaryContent = `
 # Project Summary: ${project.name}
 
@@ -342,22 +341,37 @@ ${project.constraints}
     `;
     zip.file("00_Project_Summary.md", summaryContent.trim());
 
-    documents.forEach((phase) => {
-      const phaseNumber = project.phases.findIndex(p => p.id === phase.id) + 1;
-      const fileName = `${String(phaseNumber).padStart(2, '0')}_${phase.name.replace(/\s+/g, '_')}.md`;
-      zip.file(fileName, phase.output);
+    project.phases.forEach((phase, index) => {
+      const phaseNumber = String(index + 1).padStart(2, '0');
+      const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
+      
+      const phaseFolder = zip.folder(phaseFolderName);
+
+      if (phase.output) {
+        phaseFolder.file(`_Phase_Specification.md`, phase.output);
+      }
+
+      if (phase.sprints && phase.sprints.length > 0) {
+        phase.sprints.forEach(sprint => {
+          if (sprint.output) {
+            phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
+          }
+        });
+      }
     });
 
     const content = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(content);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.name.replace(/\s+/g, '_')}_Documents.zip`;
+    link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+
+  const hasAnyDocuments = project.phases.some(p => p.output || (p.sprints && p.sprints.some(s => s.output)));
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -366,15 +380,13 @@ ${project.constraints}
             <Button variant="outline" size="sm" onClick={onBack} aria-label="Back to Dashboard"><ArrowLeft className="w-4 h-4" /></Button>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Documents</h1>
         </div>
-        {documents.length > 0 && (
-          <Button onClick={downloadAllAsZip}>
-            <Archive className="mr-2 w-4 h-4" /> Download All as .zip
-          </Button>
-        )}
+        <Button onClick={downloadAllAsZip} disabled={!hasAnyDocuments}>
+          <Archive className="mr-2 w-4 h-4" /> Download All as .zip
+        </Button>
       </div>
 
-      <Card>
-        {documents.length === 0 ? (
+      {!hasAnyDocuments ? (
+        <Card>
           <div className="text-center py-12">
             <FileText className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No Documents Generated</h3>
@@ -382,28 +394,55 @@ ${project.constraints}
               Start by generating output for a project phase.
             </p>
           </div>
-        ) : (
-          <ul role="list" className="divide-y divide-gray-200 dark:divide-gray-700">
-            {documents.map(phase => (
-              <li key={phase.id} className="flex items-center justify-between py-4">
-                <div className="flex items-center gap-3">
-                  <FileText className="w-6 h-6 text-blue-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{phase.name}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{phase.output.length.toLocaleString()} characters</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => downloadSingleFile(phase)}>
-                  <Download className="mr-2 w-4 h-4" /> Download .md
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {project.phases.map(phase => {
+            const phaseDocs = phase.sprints?.filter(s => s.output) || [];
+            const hasMainDoc = !!phase.output;
+            if (!hasMainDoc && phaseDocs.length === 0) return null;
+
+            return (
+              <Card key={phase.id} title={phase.name} description={phase.description}>
+                <ul role="list" className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {hasMainDoc && (
+                    <li className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-6 h-6 text-blue-500" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">Main Specification</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{phase.output.length.toLocaleString()} characters</p>
+                        </div>
+                      </div>
+                      <Button variant={phase.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(phase.output, `${project.name}_${phase.name}`)}>
+                        <Download className="mr-2 w-4 h-4" /> Download .md
+                      </Button>
+                    </li>
+                  )}
+                  {phaseDocs.map(sprint => (
+                     <li key={sprint.id} className="flex items-center justify-between py-3">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-6 h-6 text-indigo-500" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">Sprint: {sprint.name}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{sprint.output.length.toLocaleString()} characters</p>
+                          </div>
+                        </div>
+                        <Button variant={sprint.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(sprint.output, `${project.name}_${phase.name}_${sprint.name}`)}>
+                          <Download className="mr-2 w-4 h-4" /> Download .md
+                        </Button>
+                      </li>
+                  ))}
+                </ul>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   );
 };
+
 
 const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme }) => {
   const completedPhases = project.phases.filter(p => p.status === 'completed').length;
@@ -418,14 +457,69 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme })
   };
 
   const firstIncompleteIndex = project.phases.findIndex(p => p.status !== 'completed');
+  
+  const downloadAllAsZip = async () => {
+    const JSZip = (window as any).JSZip;
+    if (!JSZip) {
+      console.error("JSZip library not found.");
+      return;
+    }
+    const zip = new JSZip();
+
+    const summaryContent = `
+# Project Summary: ${project.name}
+
+## Disciplines
+- ${project.disciplines.join('\n- ')}
+
+## Requirements
+${project.requirements}
+
+## Constraints
+${project.constraints}
+    `;
+    zip.file("00_Project_Summary.md", summaryContent.trim());
+
+    project.phases.forEach((phase, index) => {
+      const phaseNumber = String(index + 1).padStart(2, '0');
+      const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
+      
+      const phaseFolder = zip.folder(phaseFolderName);
+
+      if (phase.output) {
+        phaseFolder.file(`_Phase_Specification.md`, phase.output);
+      }
+
+      if (phase.sprints && phase.sprints.length > 0) {
+        phase.sprints.forEach(sprint => {
+          if (sprint.output) {
+            phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
+          }
+        });
+      }
+    });
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(content);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-6">
          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
          <div className="flex items-center gap-2">
-           <Button variant="outline" onClick={onViewDocuments}>
-               <FileText className="mr-2 w-4 h-4" /> View Documents
+            <Button onClick={downloadAllAsZip}>
+                <Archive className="mr-2 w-4 h-4" /> Download Project Archive
+            </Button>
+           <Button variant="ghost" onClick={onViewDocuments}>
+               <BookOpen className="mr-2 w-4 h-4" /> View Documents
            </Button>
            <ThemeToggleButton theme={theme} setTheme={setTheme} />
          </div>
@@ -496,6 +590,17 @@ const EngineeringPartnerApp = () => {
     setCurrentProject(prevProject => {
       if (!prevProject) return null;
       const newPhases = prevProject.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
+      
+      const isCompleting = updates.status && (updates.status === 'completed' || updates.status === 'in-review');
+      if (isCompleting) {
+        setTimeout(() => {
+          // Check if the current view is still the phase view before navigating away
+          if (selectedPhaseIndex !== null && prevProject.phases[selectedPhaseIndex].id === phaseId) {
+            setCurrentView('dashboard');
+          }
+        }, 100); // A small delay to let the user see the status change
+      }
+
       return { ...prevProject, phases: newPhases };
     });
   };

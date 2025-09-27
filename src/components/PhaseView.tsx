@@ -443,7 +443,14 @@ Generate the JSON checklist for the ${phase.name} review.`;
                 setIsLoading(false);
             }
         } else {
-            onUpdatePhase(phase.id, { status: 'completed', output: finalOutput });
+            const updates: { status: string; output: string; sprints?: any[] } = {
+                status: 'completed',
+                output: finalOutput,
+            };
+            if (phase.sprints?.length > 0) {
+                updates.sprints = phase.sprints.map(s => ({ ...s, status: 'completed' }));
+            }
+            onUpdatePhase(phase.id, updates);
         }
     };
     
@@ -455,7 +462,11 @@ Generate the JSON checklist for the ${phase.name} review.`;
     };
 
     const handleFinalizeReview = () => {
-        onUpdatePhase(phase.id, { status: 'completed' });
+        const updates: { status: string; sprints?: any[] } = { status: 'completed' };
+        if (phase.sprints?.length > 0) {
+            updates.sprints = phase.sprints.map(s => ({ ...s, status: 'completed' }));
+        }
+        onUpdatePhase(phase.id, updates);
     };
 
     const generateSubDocument = async (docId) => {
