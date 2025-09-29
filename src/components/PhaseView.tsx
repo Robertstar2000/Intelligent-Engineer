@@ -50,7 +50,7 @@ const DesignReviewChecklist = ({ checklist, onCheckChange, onFinalize }) => {
 };
 
 
-export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project }) => {
+export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project, apiKey }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [loadingSprint, setLoadingSprint] = useState(null);
     const [generationError, setGenerationError] = useState('');
@@ -98,7 +98,7 @@ ${project?.constraints || 'Not specified'}
 ## Task:
 Generate the preliminary design specification and a list of development sprints based on the project details.`;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
@@ -204,7 +204,7 @@ ${phase.output}
 ## Task:
 Generate the detailed technical specification and a list of key deliverables in JSON format for this sprint.`;
             
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
@@ -279,7 +279,7 @@ Generate the detailed technical specification and a list of key deliverables in 
             return;
         }
 
-        if (!process.env.API_KEY) {
+        if (!apiKey) {
             setGenerationError('API key is required. Please set the API_KEY environment variable.');
             return;
         }
@@ -333,7 +333,7 @@ Generate the complete engineering documentation in Markdown format for the **${p
                 throw new Error(`The generated prompt is too long (${userPrompt.length} characters), exceeding the ${MAX_PROMPT_CHARACTERS} character limit. Please try to shorten project requirements, constraints, or the output from the previous phase.`);
             }
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
@@ -391,7 +391,7 @@ ${documentForReview}
 ## Task:
 Generate the JSON checklist for the ${phase.name} review.`;
 
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: userPrompt,
@@ -521,7 +521,7 @@ ${subPhaseContext}
 Generate the **${doc.name}** document based on the prompt below:
 "${specificPrompt}"`;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
@@ -566,7 +566,7 @@ Generate the **${doc.name}** document based on the prompt below:
         return (
             <div className="space-y-6">
                 <PhaseHeader phase={phase} disciplines={disciplines} />
-                {!process.env.API_KEY && <ApiKeyWarning />}
+                {!apiKey && <ApiKeyWarning />}
                 {generationError && <GenerationError message={generationError} />}
                 
                 <Card title="Required Documents" description="Generate and edit each foundational document to complete this phase.">
@@ -585,7 +585,7 @@ Generate the **${doc.name}** document based on the prompt below:
                                 </div>
                                 <div className="mt-4">
                                     {!doc.output ? (
-                                        <Button size="sm" onClick={() => generateSubDocument(doc.id)} disabled={!process.env.API_KEY || loadingDocId === doc.id}>
+                                        <Button size="sm" onClick={() => generateSubDocument(doc.id)} disabled={!apiKey || loadingDocId === doc.id}>
                                             {loadingDocId === doc.id ? (<><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>) : (<><Play className="mr-2 w-4 h-4" />Generate Document</>)}
                                         </Button>
                                     ) : (
@@ -644,7 +644,7 @@ Generate the **${doc.name}** document based on the prompt below:
         return (
             <div className="space-y-6">
                 <PhaseHeader phase={phase} disciplines={disciplines} />
-                {!process.env.API_KEY && <ApiKeyWarning />}
+                {!apiKey && <ApiKeyWarning />}
                 {generationError && <GenerationError message={generationError} />}
 
                 <TuningControls settings={phase.tuningSettings} onChange={handleUpdateTuning} />
@@ -652,7 +652,7 @@ Generate the **${doc.name}** document based on the prompt below:
                 <Card title={allSprintsDone ? "Final Design Specification" : "Preliminary Design Specification"} description={!phase.output ? "Generate a spec and sprints to begin." : "This document will be updated as you complete sprints."}>
                     {!phase.output ? (
                          <div className="text-center py-8">
-                             <Button onClick={generateOutput} disabled={!process.env.API_KEY || isLoading}>
+                             <Button onClick={generateOutput} disabled={!apiKey || isLoading}>
                                  {isLoading ? ( <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</> ) : 
                                  ( <><Sliders className="mr-2 w-4 h-4" />Generate Spec & Sprints</> )}
                              </Button>
@@ -676,7 +676,7 @@ Generate the **${doc.name}** document based on the prompt below:
                                     </div>
                                     <div className="mt-4">
                                         {!sprint.output ? (
-                                            <Button size="sm" onClick={() => generateSprintOutput(sprint.id)} disabled={!process.env.API_KEY || loadingSprint === sprint.id}>
+                                            <Button size="sm" onClick={() => generateSprintOutput(sprint.id)} disabled={!apiKey || loadingSprint === sprint.id}>
                                                 {loadingSprint === sprint.id ? (<><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>) : (<><Play className="mr-2 w-4 h-4" />Generate Spec & Deliverables</>)}
                                             </Button>
                                         ) : (
@@ -764,7 +764,7 @@ Generate the **${doc.name}** document based on the prompt below:
         <div className="space-y-6">
             <PhaseHeader phase={phase} disciplines={disciplines} />
 
-            {!process.env.API_KEY && <ApiKeyWarning />}
+            {!apiKey && <ApiKeyWarning />}
             {generationError && <GenerationError message={generationError} />}
 
             <TuningControls settings={phase.tuningSettings} onChange={handleUpdateTuning} />

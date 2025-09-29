@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock } from 'lucide-react';
+import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock, KeyRound, Ticket, LoaderCircle, XCircle } from 'lucide-react';
 import { PhaseView } from './src/components/PhaseView';
 import { Button, Card, Badge, ProgressBar } from './src/components/ui';
 import { HelpModal } from './src/components/HelpModal';
+import { GoogleGenAI } from "@google/genai";
+
 
 // --- THEME MANAGEMENT ---
 const useTheme = () => {
@@ -94,7 +96,75 @@ const sanitizeFilename = (name: string): string => name.replace(/[\\/?%*:|"<>.\s
 
 // --- VIEW COMPONENTS ---
 
-const LandingPage = ({ onStartProject, theme, setTheme }) => {
+const ApiKeyAccess = ({ onKeyValidated, apiAccessRef, setToast }) => {
+    const [activeTab, setActiveTab] = useState('promo');
+    const [promoCode, setPromoCode] = useState('');
+    const [userApiKey, setUserApiKey] = useState('');
+    const [isValidating, setIsValidating] = useState(false);
+
+    const handleValidate = async () => {
+        setIsValidating(true);
+        if (activeTab === 'promo') {
+            await onKeyValidated(promoCode, 'promo');
+        } else {
+            if (!userApiKey) {
+                setToast({ message: 'Please enter your API Key.', type: 'error' });
+                setIsValidating(false);
+                return;
+            }
+            await onKeyValidated(userApiKey, 'user');
+        }
+        setIsValidating(false);
+    };
+
+    const tabClasses = (tabName) => `flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-offset-gray-900 ${activeTab === tabName ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`;
+
+    return (
+        <div ref={apiAccessRef} className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+            <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">API Key Access</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">This application runs in your browser and requires a Google Gemini API key to function. Choose an access method below.</p>
+            <Card className="max-w-xl mx-auto text-left">
+                <div className="p-2 bg-gray-100 dark:bg-gray-900/50 rounded-lg flex space-x-2">
+                    <button onClick={() => setActiveTab('promo')} className={tabClasses('promo')}><Ticket className="w-5 h-5" /> Use Promo Code</button>
+                    <button onClick={() => setActiveTab('user')} className={tabClasses('user')}><KeyRound className="w-5 h-5" /> Use Your Own API Key</button>
+                </div>
+                <div className="mt-6">
+                    {activeTab === 'promo' ? (
+                        <div className="space-y-4">
+                            <label htmlFor="promo-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Promo Code</label>
+                            <input type="password" id="promo-code" value={promoCode} onChange={e => setPromoCode(e.target.value)} className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Enter promo code" />
+                            <p className="text-xs text-gray-500 dark:text-gray-400">For demonstration purposes. If you have a valid promo code, enter it here.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <label htmlFor="api-key" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Your Google Gemini API Key</label>
+                            <input type="password" id="api-key" value={userApiKey} onChange={e => setUserApiKey(e.target.value)} className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Enter your API Key" />
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Your key is only stored in memory for this session. Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google AI Studio</a>.</p>
+                        </div>
+                    )}
+                </div>
+                <div className="mt-6">
+                    <Button onClick={handleValidate} disabled={isValidating} className="w-full">
+                        {isValidating ? <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> Validating...</> : activeTab === 'promo' ? 'Validate Code' : 'Validate & Use Key'}
+                    </Button>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
+const LandingPage = ({ onStartProject, theme, setTheme, isKeyValidated, onKeyValidated, setToast }) => {
+    const apiAccessRef = useRef<HTMLDivElement>(null);
+    
+    const handleStartProjectClick = () => {
+        if (isKeyValidated) {
+            onStartProject();
+        } else {
+            setToast({ message: 'Please validate an API key to start a new project.', type: 'error' });
+            apiAccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
+    
     const phaseGroups = [
         { 
             title: 'Foundation', 
@@ -160,11 +230,14 @@ const LandingPage = ({ onStartProject, theme, setTheme }) => {
           <div className="text-center">
             <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">Intelligent <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Engineering</span></h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">An AI-powered companion that guides you through the full lifecycle of engineering development using proven HMAP methodologies</p>
-            <Button size="lg" onClick={onStartProject} className="text-lg px-8 py-4"><>Start New Project <ChevronRight className="ml-2 w-5 h-5" /></></Button>
+            <Button size="lg" onClick={handleStartProjectClick} className="text-lg px-8 py-4"><>Start New Project <ChevronRight className="ml-2 w-5 h-5" /></></Button>
             <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">This application created by {styledMifeco} a Mars Technology Institute (MTI) affiliate.</p>
           </div>
         </div>
       </div>
+
+      <ApiKeyAccess onKeyValidated={onKeyValidated} apiAccessRef={apiAccessRef} setToast={setToast} />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">Powerful Features</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -568,6 +641,37 @@ ${project.constraints}
   );
 };
 
+
+const Toast = ({ message, type, onDismiss }) => {
+    const baseClasses = 'fixed top-5 right-5 z-[150] max-w-sm w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black dark:ring-gray-700 ring-opacity-5 overflow-hidden transition-all duration-300 transform';
+    const typeClasses = {
+        success: 'border-green-500',
+        error: 'border-red-500',
+    };
+    const Icon = type === 'success' ? CheckCircle : XCircle;
+
+    return (
+        <div className={`${baseClasses} border-l-4 ${typeClasses[type]}`}>
+            <div className="p-4">
+                <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                        <Icon className={`h-6 w-6 ${type === 'success' ? 'text-green-400' : 'text-red-400'}`} aria-hidden="true" />
+                    </div>
+                    <div className="ml-3 w-0 flex-1 pt-0.5">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{message}</p>
+                    </div>
+                    <div className="ml-4 flex-shrink-0 flex">
+                        <button onClick={onDismiss} className="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-900">
+                            <span className="sr-only">Close</span>
+                            <XCircle className="h-5 w-5" aria-hidden="true" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- MAIN APP ---
 const EngineeringPartnerApp = () => {
   const [currentView, setCurrentView] = useState<'landing' | 'wizard' | 'dashboard' | 'phase' | 'documents'>('landing');
@@ -575,6 +679,46 @@ const EngineeringPartnerApp = () => {
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState<number | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [theme, setTheme] = useTheme();
+  
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [isKeyValidated, setIsKeyValidated] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+        const timer = setTimeout(() => {
+            setToast(null);
+        }, 5000);
+        return () => clearTimeout(timer);
+    }
+  }, [toast]);
+  
+  const handleValidateKey = async (key: string, type: 'user' | 'promo') => {
+      if (type === 'promo') {
+          if (key === 'rm2214ri') {
+              if (process.env.API_KEY) {
+                  setApiKey(process.env.API_KEY);
+                  setIsKeyValidated(true);
+                  setToast({ message: 'Promo code accepted! You can now start a project.', type: 'success' });
+              } else {
+                  setToast({ message: 'Promo code is valid, but the application is missing its primary API key.', type: 'error' });
+              }
+          } else {
+              setToast({ message: 'Invalid promo code.', type: 'error' });
+          }
+      } else { // type === 'user'
+          try {
+              const ai = new GoogleGenAI({ apiKey: key });
+              await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'Hi' });
+              setApiKey(key);
+              setIsKeyValidated(true);
+              setToast({ message: 'API Key validated successfully! You can now start a project.', type: 'success' });
+          } catch (error) {
+              console.error("API Key validation failed:", error);
+              setToast({ message: 'The provided API Key is invalid or has insufficient permissions.', type: 'error' });
+          }
+      }
+  };
 
   const handleProjectCreated = (project) => {
     setCurrentProject(project);
@@ -608,7 +752,7 @@ const EngineeringPartnerApp = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'landing':
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} />;
+        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} isKeyValidated={isKeyValidated} onKeyValidated={handleValidateKey} setToast={setToast} />;
       case 'wizard':
         return <ProjectWizard onProjectCreated={handleProjectCreated} onCancel={() => setCurrentView('landing')} />;
       case 'dashboard':
@@ -624,18 +768,20 @@ const EngineeringPartnerApp = () => {
               phase={currentProject.phases[selectedPhaseIndex]}
               onUpdatePhase={handleUpdatePhase}
               disciplines={currentProject.disciplines}
+              apiKey={apiKey}
             />
           </div>
         );
       case 'documents':
         return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} />;
       default:
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} />;
+        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} isKeyValidated={isKeyValidated} onKeyValidated={handleValidateKey} setToast={setToast} />;
     }
   };
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
       {renderContent()}
       <button
         onClick={() => setIsHelpModalOpen(true)}

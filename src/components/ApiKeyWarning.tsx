@@ -9,9 +9,9 @@ export const ApiKeyWarning = () => (
         </svg>
       </div>
       <div className="ml-3">
-        <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">API Key Not Found</h3>
+        <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">API Key Not Provided</h3>
         <div className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
-          <p>Please ensure the API_KEY environment variable is set to enable AI-powered content generation.</p>
+          <p>An API key has not been provided or is invalid. AI features for this phase are disabled.</p>
         </div>
       </div>
     </div>
