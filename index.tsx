@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock, KeyRound, Ticket, LoaderCircle, XCircle } from 'lucide-react';
+import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock, KeyRound, Ticket, LoaderCircle, XCircle, Bot, FlaskConical, FileJson } from 'lucide-react';
 import { PhaseView } from './src/components/PhaseView';
 import { Button, Card, Badge, ProgressBar } from './src/components/ui';
 import { HelpModal } from './src/components/HelpModal';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 
 // --- THEME MANAGEMENT ---
@@ -377,21 +377,32 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
   );
 };
 
-const DocumentsPage = ({ project, onBack }) => {
+const DocumentsPage = ({ project, onBack, apiKey, setToast }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationTarget, setGenerationTarget] = useState<string | null>(null);
+
   if (!project) return null;
 
-  const downloadMarkdownFile = (content, fileName) => {
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const downloadFile = (content, fileName, type) => {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${sanitizeFilename(fileName)}.md`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+
+  const downloadMarkdownFile = (content, fileName) => {
+    downloadFile(content, `${sanitizeFilename(fileName)}.md`, 'text/markdown;charset=utf-8');
+  };
   
+  const downloadJsonFile = (content, fileName) => {
+    downloadFile(content, `${sanitizeFilename(fileName)}.json`, 'application/json;charset=utf-8');
+  };
+
   const downloadAllAsZip = async () => {
     const JSZip = (window as any).JSZip;
     if (!JSZip) {
@@ -443,6 +454,124 @@ ${project.constraints}
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+  
+  const handleGenerateAndDownload = async (type: 'vibe-coding' | 'simulation' | 'summary') => {
+      if (!apiKey) {
+          setToast({ message: 'API Key not found. Cannot generate content.', type: 'error' });
+          return;
+      }
+      setIsGenerating(true);
+      setGenerationTarget(type);
+
+      try {
+          let fullContext = `# Project: ${project.name}\n\n## Disciplines\n- ${project.disciplines.join('\n- ')}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n---\n\n## Generated Phase Documentation\n`;
+          project.phases.forEach(phase => {
+              if (phase.output) {
+                  fullContext += `\n### Phase: ${phase.name}\n\n${phase.output}\n\n---\n`;
+              } else if (phase.sprints && phase.sprints.some(s => s.output)) {
+                  fullContext += `\n### Phase: ${phase.name}\n\n`;
+                  phase.sprints.forEach(sprint => {
+                      if (sprint.output) {
+                          fullContext += `#### Sprint/Document: ${sprint.name}\n\n${sprint.output}\n\n`;
+                      }
+                  });
+                  fullContext += `\n---\n`;
+              }
+          });
+          fullContext = fullContext.trim();
+
+          const ai = new GoogleGenAI({ apiKey });
+          let systemInstruction = '';
+          let userPrompt = '';
+          let config: any = { model: 'gemini-2.5-flash' };
+          let fileName = '';
+          let downloadFn: (content: string, fileName: string) => void;
+
+          switch (type) {
+              case 'vibe-coding':
+                  systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate the full source code to implement the design for an engineering project based on its documentation.";
+                  userPrompt = `Based on the complete project documentation provided below, generate a single, comprehensive and expert-level prompt in Markdown format. This new prompt will be given to an AI coding assistant (like a 'vibe code ide') to implement the full design and generate the source code for the project. The generated prompt should be highly detailed and instruct the coding AI to: 1. Choose an appropriate, modern technology stack. 2. Structure the project with a clean, scalable architecture. 3. Implement all specified features and functionalities from the design. 4. Include comprehensive error handling, logging, and security measures. 5. Generate unit and integration tests. 6. Create a README.md file with setup and deployment instructions.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
+                  fileName = `${project.name}_vibe_coding_prompt`;
+                  downloadFn = downloadMarkdownFile;
+                  break;
+              case 'simulation':
+                  systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate a *simulation* of an engineering project based on its documentation.";
+                  userPrompt = `Based on the complete project documentation provided below, generate a single, comprehensive and expert-level prompt in Markdown format. This new prompt will be given to an AI coding assistant to build a functional simulation of the designed system. The generated prompt should instruct the coding AI to: 1. Focus on accurately modeling the system's behavior, logic, and interactions based on the specifications. 2. Create a simple, interactive user interface (if applicable) to control simulation parameters and visualize the results. 3. Implement key performance indicators (KPIs) and data logging to analyze the system's performance under different conditions. 4. The simulation does not need to be production-ready code, but it must be a valid representation of the design.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
+                  fileName = `${project.name}_simulation_prompt`;
+                  downloadFn = downloadMarkdownFile;
+                  break;
+              case 'summary':
+                  systemInstruction = "You are a project management AI assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON format, including a schema description within the JSON itself.";
+                  userPrompt = `Parse the following complete project documentation and generate a single JSON object. This JSON object must strictly adhere to the provided schema, containing two top-level keys: 'schema' and 'data'. The 'schema' object must contain string descriptions for each field that will appear in the 'data' object. The 'data' object must contain the extracted project summary, a complete list of all generated documents, and a complete list of all sprints.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
+                  config.config = {
+                      responseMimeType: "application/json",
+                      responseSchema: {
+                          type: Type.OBJECT,
+                          properties: {
+                              schema: {
+                                  type: Type.OBJECT,
+                                  description: "An object describing the structure of the 'data' field. The keys must match the keys in 'data' and the values must be descriptions of what that data represents.",
+                                  properties: {
+                                      projectSummary: { type: Type.STRING },
+                                      documents: { type: Type.STRING },
+                                      sprints: { type: Type.STRING }
+                                  },
+                                  required: ["projectSummary", "documents", "sprints"]
+                              },
+                              data: {
+                                  type: Type.OBJECT,
+                                  properties: {
+                                      projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals and design." },
+                                      documents: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all major generated document titles (from phases and sprints)." },
+                                      sprints: {
+                                          type: Type.ARRAY,
+                                          items: {
+                                              type: Type.OBJECT,
+                                              properties: { name: { type: Type.STRING }, description: { type: Type.STRING } },
+                                              required: ["name", "description"]
+                                          },
+                                          description: "A list of all development sprints with their names and descriptions."
+                                      }
+                                  },
+                                  required: ["projectSummary", "documents", "sprints"]
+                              }
+                          },
+                          required: ['schema', 'data']
+                      }
+                  };
+                  fileName = `${project.name}_design_summary_and_sprints_prompt`;
+                  downloadFn = downloadJsonFile;
+                  break;
+          }
+
+          const response = await ai.models.generateContent({
+              ...config,
+              contents: userPrompt,
+              config: { ...config.config, systemInstruction }
+          });
+          
+          let contentToDownload = response.text;
+          if (type === 'summary') {
+              try {
+                  const parsed = JSON.parse(response.text);
+                  contentToDownload = JSON.stringify(parsed, null, 2);
+              } catch (e) {
+                  console.error("Failed to parse and pretty-print JSON:", e);
+              }
+          }
+          
+          downloadFn(contentToDownload, fileName);
+          setToast({ message: `${fileName} generated and downloaded successfully.`, type: 'success' });
+
+      } catch (error) {
+          console.error('Failed to generate content:', error);
+          setToast({ message: `Failed to generate: ${error.message}`, type: 'error' });
+      } finally {
+          setIsGenerating(false);
+          setGenerationTarget(null);
+      }
+  };
+
 
   const hasAnyDocuments = project.phases.some(p => p.output || (p.sprints && p.sprints.some(s => s.output)));
 
@@ -453,10 +582,37 @@ ${project.constraints}
             <Button variant="outline" size="sm" onClick={onBack} aria-label="Back to Dashboard"><ArrowLeft className="w-4 h-4" /></Button>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Documents</h1>
         </div>
-        <Button onClick={downloadAllAsZip} disabled={!hasAnyDocuments}>
-          <Archive className="mr-2 w-4 h-4" /> Download All as .zip
-        </Button>
       </div>
+
+       <Card>
+           <div>
+                <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex-shrink-0">Project Exports</h3>
+                    <div className="flex-grow border-t border-gray-200 dark:border-gray-700 sm:border-t-0 sm:border-l sm:pl-4">
+                        <div className="flex items-center gap-2 flex-wrap justify-start">
+                            <Button onClick={downloadAllAsZip} disabled={!hasAnyDocuments || isGenerating}>
+                                <Archive className="mr-2 w-4 h-4" /> Download All as .zip
+                            </Button>
+                            <Button onClick={() => handleGenerateAndDownload('vibe-coding')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download vibe coding prompt.">
+                                {isGenerating && generationTarget === 'vibe-coding' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Bot className="mr-2 w-4 h-4" />}
+                                Generate Vibe Coding Prompt
+                            </Button>
+                            <Button onClick={() => handleGenerateAndDownload('simulation')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download code simulation prompt.">
+                                {isGenerating && generationTarget === 'simulation' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <FlaskConical className="mr-2 w-4 h-4" />}
+                                Generate Simulation Prompt
+                            </Button>
+                            <Button onClick={() => handleGenerateAndDownload('summary')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download summary of design, list of documents and list of sprints prompt.">
+                                {isGenerating && generationTarget === 'summary' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <FileJson className="mr-2 w-4 h-4" />}
+                                Generate Design Summary Prompt
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 pl-2">
+                    Use these tools to package your project for hand-off. <strong>Download All</strong> creates a complete project archive. The <strong>Generate</strong> buttons create specialized prompts for AI coding assistants (implementation and simulation) and a structured JSON summary for project management.
+                </p>
+           </div>
+        </Card>
 
       {!hasAnyDocuments ? (
         <Card>
@@ -773,7 +929,7 @@ const EngineeringPartnerApp = () => {
           </div>
         );
       case 'documents':
-        return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} />;
+        return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} apiKey={apiKey} setToast={setToast} />;
       default:
         return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} isKeyValidated={isKeyValidated} onKeyValidated={handleValidateKey} setToast={setToast} />;
     }
