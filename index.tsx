@@ -4,11 +4,135 @@ import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Cl
 import { PhaseView } from './src/components/PhaseView';
 import { Button, Card, Badge, ProgressBar } from './src/components/ui';
 import { HelpModal } from './src/components/HelpModal';
-import { GoogleGenAI, Type } from "@google/genai";
+// FIX: Import GenerateContentResponse to correctly type API call results.
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { TuningControls } from './src/components/TuningControls';
 
+
+// --- HELPER FUNCTION ---
+// FIX: Added generic types and type for catch block error to resolve TypeScript errors.
+const withRetry = async <T,>(fn: () => Promise<T>, retries = 1): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries > 0) {
+      console.warn('API call failed, retrying...', error);
+      await new Promise(res => setTimeout(res, 1000)); // Add a 1s delay for transient issues
+      return withRetry(fn, retries - 1);
+    }
+    throw error;
+  }
+};
+
+const sanitizeFilename = (name: string): string => name.replace(/[\\/?%*:|"<>.\s]/g, '_');
+
+const generateProjectZip = async (
+    project: Project, 
+    apiKey: string | null, 
+    setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void
+): Promise<void> => {
+    if (!apiKey) {
+        setToast({ message: 'API Key is required to generate the summary.', type: 'error' });
+        return;
+    }
+
+    const JSZip = (window as any).JSZip;
+    if (!JSZip) {
+        setToast({ message: 'JSZip library not found.', type: 'error' });
+        console.error("JSZip library not found.");
+        return;
+    }
+    
+    setToast({ message: 'Generating comprehensive project summary with AI...', type: 'success' });
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+
+        let fullContext = `# Project: ${project.name}\n\n## Disciplines\n- ${project.disciplines.join('\n- ')}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n---\n\n## Generated Phase Documentation Overview\n`;
+        project.phases.forEach(phase => {
+            if (phase.output || (phase.sprints && phase.sprints.some(s => s.output))) {
+                fullContext += `\n### Phase: ${phase.name} - Status: ${phase.status}\n`;
+                if (phase.output) {
+                    fullContext += `* Main Specification: Generated (${phase.output.length} characters)\n`;
+                }
+                if (phase.sprints && phase.sprints.some(s => s.output)) {
+                    phase.sprints.forEach(sprint => {
+                        if (sprint.output) {
+                            fullContext += `  * Sprint/Document: ${sprint.name} - Generated (${sprint.output.length} characters)\n`;
+                        }
+                    });
+                }
+            }
+        });
+        fullContext = fullContext.trim();
+
+        const systemInstruction = `You are an expert technical writer and project manager AI. Your task is to generate a comprehensive and well-structured project summary in Markdown format. This summary will serve as the main README file in a project archive.`;
+        const userPrompt = `Based on the complete project context provided below, generate a detailed project summary. The summary should include:
+1.  **Executive Summary**: A high-level overview of the project's purpose, goals, and key design choices.
+2.  **Key Features & Functionality**: A bulleted list derived from the project requirements and generated documentation.
+3.  **Project Status**: A brief summary of the project's current progress, highlighting completed phases and what is next.
+4.  **Technical Overview**: A short description of the core technical approach, mentioning the engineering disciplines involved.
+5.  **Generated Artifacts**: A summary of the documents that have been generated across the various phases.
+
+The tone should be professional, clear, and concise.
+
+---
+
+## Full Project Context:
+
+${fullContext}`;
+        
+        const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
+        const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: combinedContents,
+        }));
+
+        const summaryContent = response.text;
+        
+        setToast({ message: 'AI summary generated. Assembling project archive...', type: 'success' });
+        const zip = new JSZip();
+        zip.file("00_Project_Summary.md", summaryContent.trim());
+
+        project.phases.forEach((phase, index) => {
+            const phaseNumber = String(index + 1).padStart(2, '0');
+            const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
+            const phaseFolder = zip.folder(phaseFolderName);
+            if (!phaseFolder) return;
+
+            if (phase.output) {
+                phaseFolder.file(`_Phase_Specification.md`, phase.output);
+            }
+
+            if (phase.sprints && phase.sprints.length > 0) {
+                phase.sprints.forEach(sprint => {
+                    if (sprint.output) {
+                        phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
+                    }
+                });
+            }
+        });
+
+        const content = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(content);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        setToast({ message: 'Project archive downloaded!', type: 'success' });
+
+    } catch (error: any) {
+        console.error('Failed to generate zip archive:', error);
+        setToast({ message: `Failed to generate archive: ${error.message}`, type: 'error' });
+    }
+};
 
 // --- THEME MANAGEMENT ---
-const useTheme = () => {
+const useTheme = (): [string, React.Dispatch<React.SetStateAction<string>>] => {
     const [theme, setThemeState] = useState(() => {
         if (typeof window === 'undefined') return 'dark';
         return localStorage.getItem('theme') || 'dark';
@@ -26,7 +150,12 @@ const useTheme = () => {
     return [theme, setThemeState];
 };
 
-const ThemeToggleButton = ({ theme, setTheme }) => {
+// FIX: Added props type for ThemeToggleButton
+interface ThemeToggleButtonProps {
+  theme: string;
+  setTheme: (theme: string) => void;
+}
+const ThemeToggleButton = ({ theme, setTheme }: ThemeToggleButtonProps) => {
     const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
     return (
         <button
@@ -47,6 +176,7 @@ interface Project {
   requirements: string;
   constraints: string;
   disciplines: string[];
+  developmentMode: 'full' | 'rapid';
   currentPhase: number;
   phases: Phase[];
   createdAt: Date;
@@ -91,115 +221,66 @@ const ENGINEERING_DISCIPLINES = [
   'Electronics Engineering', 'Manufacturing Engineering'
 ];
 
-const sanitizeFilename = (name: string): string => name.replace(/[\\/?%*:|"<>.\s]/g, '_');
+
 
 
 // --- VIEW COMPONENTS ---
+// FIX: Removed ApiKeyAccess component to comply with Gemini API guidelines. API key should be handled via environment variables.
 
-const ApiKeyAccess = ({ onKeyValidated, apiAccessRef, setToast }) => {
-    const [activeTab, setActiveTab] = useState('promo');
-    const [promoCode, setPromoCode] = useState('');
-    const [userApiKey, setUserApiKey] = useState('');
-    const [isValidating, setIsValidating] = useState(false);
-
-    const handleValidate = async () => {
-        setIsValidating(true);
-        if (activeTab === 'promo') {
-            await onKeyValidated(promoCode, 'promo');
-        } else {
-            if (!userApiKey) {
-                setToast({ message: 'Please enter your API Key.', type: 'error' });
-                setIsValidating(false);
-                return;
-            }
-            await onKeyValidated(userApiKey, 'user');
-        }
-        setIsValidating(false);
-    };
-
-    const tabClasses = (tabName) => `flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-offset-gray-900 ${activeTab === tabName ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`;
-
-    return (
-        <div ref={apiAccessRef} className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-            <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">API Key Access</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">This application runs in your browser and requires a Google Gemini API key to function. Choose an access method below.</p>
-            <Card className="max-w-xl mx-auto text-left">
-                <div className="p-2 bg-gray-100 dark:bg-gray-900/50 rounded-lg flex space-x-2">
-                    <button onClick={() => setActiveTab('promo')} className={tabClasses('promo')}><Ticket className="w-5 h-5" /> Use Promo Code</button>
-                    <button onClick={() => setActiveTab('user')} className={tabClasses('user')}><KeyRound className="w-5 h-5" /> Use Your Own API Key</button>
-                </div>
-                <div className="mt-6">
-                    {activeTab === 'promo' ? (
-                        <div className="space-y-4">
-                            <label htmlFor="promo-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Promo Code</label>
-                            <input type="password" id="promo-code" value={promoCode} onChange={e => setPromoCode(e.target.value)} className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Enter promo code" />
-                            <p className="text-xs text-gray-500 dark:text-gray-400">For demonstration purposes. If you have a valid promo code, enter it here.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <label htmlFor="api-key" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Your Google Gemini API Key</label>
-                            <input type="password" id="api-key" value={userApiKey} onChange={e => setUserApiKey(e.target.value)} className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Enter your API Key" />
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Your key is only stored in memory for this session. Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google AI Studio</a>.</p>
-                        </div>
-                    )}
-                </div>
-                <div className="mt-6">
-                    <Button onClick={handleValidate} disabled={isValidating} className="w-full">
-                        {isValidating ? <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> Validating...</> : activeTab === 'promo' ? 'Validate Code' : 'Validate & Use Key'}
-                    </Button>
-                </div>
-            </Card>
-        </div>
-    );
-};
-
-const LandingPage = ({ onStartProject, theme, setTheme, isKeyValidated, onKeyValidated, setToast }) => {
+// FIX: Added props type for LandingPage and removed API key related props.
+interface LandingPageProps {
+  onStartProject: () => void;
+  theme: string;
+  setTheme: (theme: string) => void;
+  setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
+}
+const LandingPage = ({ onStartProject, theme, setTheme, setToast }: LandingPageProps) => {
     const apiAccessRef = useRef<HTMLDivElement>(null);
     
+    // FIX: Simplified handleStartProjectClick as API key validation is removed from UI.
     const handleStartProjectClick = () => {
-        if (isKeyValidated) {
-            onStartProject();
-        } else {
-            setToast({ message: 'Please validate an API key to start a new project.', type: 'error' });
-            apiAccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!process.env.API_KEY) {
+            setToast({ message: 'API key is not configured. Please contact the administrator.', type: 'error' });
+            return;
         }
+        onStartProject();
     };
     
     const phaseGroups = [
         { 
             title: 'Foundation', 
             phases: [
-                { name: 'Requirements', description: 'Define clear functional and performance objectives.' },
-                { name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies.' },
+                { name: 'Requirements', description: 'Define clear functional and performance objectives, creating a solid foundation with a project scope, SOW, and technical specifications.' },
+                { name: 'Preliminary Design', description: 'Explore the design space by creating and comparing initial concepts, culminating in a formal trade study to select the optimal path forward.' },
             ], 
             icon: <BookOpen className="w-6 h-6" />, color: 'from-blue-500 to-cyan-500' 
         },
         { 
             title: 'Development', 
             phases: [
-                { name: 'Critical Design', description: 'Develop the detailed, comprehensive design specification.' },
-                { name: 'Testing', description: 'Verify and validate that you built the right product, right.' },
+                { name: 'Critical Design', description: 'Develop the detailed, comprehensive design specification, breaking down the work into implementation sprints including DFMA and FMEA.' },
+                { name: 'Testing', description: 'Create formal Verification and Validation plans to ensure you built the right product, and that you built the product right.' },
             ], 
             icon: <Wrench className="w-6 h-6" />, color: 'from-purple-500 to-pink-500' 
         },
         { 
             title: 'Delivery & Beyond', 
             phases: [
-                { name: 'Launch', description: 'Formulate a detailed launch and deployment strategy.' },
-                { name: 'Operation', description: 'Create an operations and maintenance manual.' },
-                { name: 'Improvement', description: 'Identify and prioritize future improvements.' },
+                { name: 'Launch', description: 'Move from a completed design to market reality by formulating a detailed launch and deployment strategy with rollback plans.' },
+                { name: 'Operation', description: 'Ensure long-term success by creating a comprehensive operations and maintenance manual with support protocols and monitoring plans.' },
+                { name: 'Improvement', description: 'Close the loop by using performance analysis and user feedback to identify and prioritize future product improvements and features.' },
             ], 
             icon: <Rocket className="w-6 h-6" />, color: 'from-green-500 to-emerald-500' 
         }
     ];
 
   const features = [
-    { title: 'AI-Powered Generation', description: 'Intelligent, context-aware engineering assistance tailored to your discipline', icon: <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">AI</div> },
-    { title: 'Context Propagation', description: 'Full memory across all phases, ensuring continuity and consistency', icon: <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg flex items-center justify-center text-white">⚡</div> },
-    { title: 'Domain Toolkits', description: 'Tools and outputs tailored to each supported engineering discipline', icon: <Wrench className="w-8 h-8 text-orange-500" /> },
-    { title: 'Document Generation', description: 'Professional deliverables in multiple formats ready for download', icon: <Download className="w-8 h-8 text-purple-500" /> },
-    { title: 'HMAP Integration', description: 'Human-Mediated Agentic Process ensuring quality and oversight', icon: <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">H</div> },
-    { title: 'Lean & Agile Process', description: 'Best-in-class, SpaceX-derived processes including sprints and a Minimum Viable Product focus. "The best part is no part."', icon: <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold">🚀</div> }
+    { title: 'AI-Powered Generation', description: 'Generate comprehensive documents, from technical specifications to trade studies, with context-aware AI assistance tailored to your specific engineering discipline.', icon: <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">AI</div> },
+    { title: 'Context Propagation', description: 'Maintain full project memory across all development phases. The AI uses completed work as context for the next step, ensuring seamless continuity and consistency.', icon: <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg flex items-center justify-center text-white">⚡</div> },
+    { title: 'Domain Toolkits', description: 'Leverage specialized AI capabilities and outputs tailored to each supported engineering discipline, ensuring the generated content is relevant and professional.', icon: <Wrench className="w-8 h-8 text-orange-500" /> },
+    { title: 'Document Generation', description: 'Effortlessly create professional-grade deliverables. Download individual documents in Markdown or a complete, structured project archive as a .zip file.', icon: <Download className="w-8 h-8 text-purple-500" /> },
+    { title: 'HMAP Integration', description: 'Employ a Human-Mediated Agentic Process. You guide the AI, tune its outputs, and retain full editorial control, ensuring expert oversight and quality at every stage.', icon: <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">H</div> },
+    { title: 'Lean & Agile Process', description: 'Utilize a best-in-class, SpaceX-derived methodology focused on sprints and Minimum Viable Product (MVP) principles. "The best part is no part; the best process is no process."', icon: <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold">🚀</div> }
   ];
 
   const mificoColors = [
@@ -229,14 +310,18 @@ const LandingPage = ({ onStartProject, theme, setTheme, isKeyValidated, onKeyVal
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
             <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">Intelligent <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Engineering</span></h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">An AI-powered companion that guides you through the full lifecycle of engineering development using proven HMAP methodologies</p>
+            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">Bridge the gap from concept to reality. This AI-powered companion guides you through the complete engineering lifecycle—from initial requirements to final launch—using a structured, Human-Mediated Agentic Process (HMAP) to ensure quality, rigor, and innovation at every step.</p>
             <Button size="lg" onClick={handleStartProjectClick} className="text-lg px-8 py-4"><>Start New Project <ChevronRight className="ml-2 w-5 h-5" /></></Button>
             <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">This application created by {styledMifeco} a Mars Technology Institute (MTI) affiliate.</p>
           </div>
         </div>
       </div>
 
-      <ApiKeyAccess onKeyValidated={onKeyValidated} apiAccessRef={apiAccessRef} setToast={setToast} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16" ref={apiAccessRef}>
+        <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">How It Works</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto text-center">This application uses the Google Gemini API to power its features. To start, simply click "Start New Project." The application is pre-configured to use a secure API key.</p>
+      </div>
+
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">Powerful Features</h2>
@@ -281,15 +366,30 @@ const LandingPage = ({ onStartProject, theme, setTheme, isKeyValidated, onKeyVal
   );
 };
 
-const ProjectWizard = ({ onProjectCreated, onCancel }) => {
+// FIX: Added props type for ProjectWizard
+interface ProjectWizardProps {
+  onProjectCreated: (project: Project) => void;
+  onCancel: () => void;
+}
+const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   const [step, setStep] = useState(1);
-  const [projectData, setProjectData] = useState({ name: '', requirements: '', constraints: '', disciplines: [] });
+  const [projectData, setProjectData] = useState({ name: '', requirements: '', constraints: '', disciplines: [] as string[] });
   const [searchTerm, setSearchTerm] = useState('');
+  const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
+  const [requirementsTuning, setRequirementsTuning] = useState<TuningSettings>({
+      clarity: 70,
+      technicality: 60,
+      foresight: 50,
+      riskAversion: 60,
+      userCentricity: 75,
+      conciseness: 40,
+  });
+
   const filteredDisciplines = ENGINEERING_DISCIPLINES.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
-  const handleDisciplineToggle = (discipline) => setProjectData(prev => ({ ...prev, disciplines: prev.disciplines.includes(discipline) ? prev.disciplines.filter(d => d !== discipline) : prev.disciplines.length < 3 ? [...prev.disciplines, discipline] : prev.disciplines }));
+  const handleDisciplineToggle = (discipline: string) => setProjectData(prev => ({ ...prev, disciplines: prev.disciplines.includes(discipline) ? prev.disciplines.filter(d => d !== discipline) : prev.disciplines.length < 3 ? [...prev.disciplines, discipline] : prev.disciplines }));
   const createProject = () => {
     onProjectCreated({
-      id: Date.now().toString(), ...projectData, currentPhase: 0, createdAt: new Date(),
+      id: Date.now().toString(), ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(),
       phases: [
         { id: '1', name: 'Requirements', description: 'Define clear functional and performance objectives', status: 'not-started', 
             sprints: [
@@ -297,7 +397,7 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
                 { id: '1-2', name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.', status: 'not-started', deliverables: [], output: '' },
                 { id: '1-3', name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.', status: 'not-started', deliverables: [], output: '' },
             ], 
-            tuningSettings: { detailLevel: 75, constraintWeight: 60, riskTolerance: 50, complianceStrictness: 80 }, isEditable: true, designReview: { required: false, checklist: [] } 
+            tuningSettings: requirementsTuning, isEditable: true, designReview: { required: false, checklist: [] } 
         },
         { 
             id: '2', name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies', status: 'not-started', 
@@ -329,19 +429,43 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl transform transition-all" title="Create a New Engineering Project" description={`Step ${step} of 4: ${['Project Name', 'Requirements', 'Constraints', 'Disciplines'][step - 1]}`}>
+      <Card className="w-full max-w-2xl transform transition-all" title="Create a New Engineering Project" description={`Step ${step} of 4: ${['Project Definition', 'Requirements', 'Constraints', 'Disciplines'][step - 1]}`}>
         <div className="space-y-6">
           <ProgressBar progress={progress} />
           {step === 1 && (
             <div>
               <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Name</label>
               <input type="text" id="projectName" value={projectData.name} onChange={e => setProjectData(p => ({ ...p, name: e.target.value }))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="e.g., Autonomous Drone Delivery System" />
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Development Mode</label>
+                <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 dark:bg-gray-900 p-1">
+                  <button type="button" onClick={() => setDevelopmentMode('full')}
+                    className={`px-3 py-2 text-sm font-semibold rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${developmentMode === 'full' ? 'bg-blue-600 text-white shadow' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    Full Scale Development
+                  </button>
+                  <button type="button" onClick={() => setDevelopmentMode('rapid')}
+                    className={`px-3 py-2 text-sm font-semibold rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${developmentMode === 'rapid' ? 'bg-blue-600 text-white shadow' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    Rapid Prototyping
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {developmentMode === 'full' ? 'Comprehensive documentation and sprints for production-ready systems.' : 'Brief, cryptic, and concise outputs for quick ideation and prototyping.'}
+                </p>
+              </div>
             </div>
           )}
           {step === 2 && (
             <div>
               <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Requirements</label>
               <textarea id="requirements" rows={5} value={projectData.requirements} onChange={e => setProjectData(p => ({ ...p, requirements: e.target.value }))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Define the core objectives, functionalities, and performance criteria." />
+              <div className="mt-6">
+                <TuningControls
+                  settings={requirementsTuning}
+                  onChange={(key, value) => setRequirementsTuning(s => ({ ...s, [key]: value }))}
+                  title="Tune Initial Requirements Generation"
+                  description="Adjust parameters for the initial AI-generated requirements documents."
+                />
+              </div>
             </div>
           )}
           {step === 3 && (
@@ -377,13 +501,21 @@ const ProjectWizard = ({ onProjectCreated, onCancel }) => {
   );
 };
 
-const DocumentsPage = ({ project, onBack, apiKey, setToast }) => {
+// FIX: Added props type for DocumentsPage
+interface DocumentsPageProps {
+  project: Project | null;
+  onBack: () => void;
+  apiKey: string | null;
+  setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
+}
+const DocumentsPage = ({ project, onBack, apiKey, setToast }: DocumentsPageProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationTarget, setGenerationTarget] = useState<string | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
 
   if (!project) return null;
 
-  const downloadFile = (content, fileName, type) => {
+  const downloadFile = (content: string, fileName: string, type: string) => {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -395,67 +527,22 @@ const DocumentsPage = ({ project, onBack, apiKey, setToast }) => {
     URL.revokeObjectURL(url);
   };
 
-  const downloadMarkdownFile = (content, fileName) => {
+  const downloadMarkdownFile = (content: string, fileName: string) => {
     downloadFile(content, `${sanitizeFilename(fileName)}.md`, 'text/markdown;charset=utf-8');
   };
   
-  const downloadJsonFile = (content, fileName) => {
+  const downloadJsonFile = (content: string, fileName: string) => {
     downloadFile(content, `${sanitizeFilename(fileName)}.json`, 'application/json;charset=utf-8');
   };
 
-  const downloadAllAsZip = async () => {
-    const JSZip = (window as any).JSZip;
-    if (!JSZip) {
-      console.error("JSZip library not found.");
-      return;
-    }
-    const zip = new JSZip();
-
-    const summaryContent = `
-# Project Summary: ${project.name}
-
-## Disciplines
-- ${project.disciplines.join('\n- ')}
-
-## Requirements
-${project.requirements}
-
-## Constraints
-${project.constraints}
-    `;
-    zip.file("00_Project_Summary.md", summaryContent.trim());
-
-    project.phases.forEach((phase, index) => {
-      const phaseNumber = String(index + 1).padStart(2, '0');
-      const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
-      
-      const phaseFolder = zip.folder(phaseFolderName);
-
-      if (phase.output) {
-        phaseFolder.file(`_Phase_Specification.md`, phase.output);
-      }
-
-      if (phase.sprints && phase.sprints.length > 0) {
-        phase.sprints.forEach(sprint => {
-          if (sprint.output) {
-            phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
-          }
-        });
-      }
-    });
-
-    const content = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(content);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadZip = async () => {
+      if (!project) return;
+      setIsZipping(true);
+      await generateProjectZip(project, apiKey, setToast);
+      setIsZipping(false);
   };
   
-  const handleGenerateAndDownload = async (type: 'vibe-coding' | 'simulation' | 'summary') => {
+  const handleGenerateAndDownload = async (type: 'vibe-coding' | 'simulation' | 'summary' | 'pm-data-pack') => {
       if (!apiKey) {
           setToast({ message: 'API Key not found. Cannot generate content.', type: 'error' });
           return;
@@ -483,27 +570,65 @@ ${project.constraints}
           const ai = new GoogleGenAI({ apiKey });
           let systemInstruction = '';
           let userPrompt = '';
-          let config: any = { model: 'gemini-2.5-flash' };
+          let genConfig: any = {};
           let fileName = '';
-          let downloadFn: (content: string, fileName: string) => void;
+          let downloadFn: (content: string, fileName: string) => void = downloadMarkdownFile;
 
           switch (type) {
               case 'vibe-coding':
                   systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate the full source code to implement the design for an engineering project based on its documentation.";
-                  userPrompt = `Based on the complete project documentation provided below, generate a single, comprehensive and expert-level prompt in Markdown format. This new prompt will be given to an AI coding assistant (like a 'vibe code ide') to implement the full design and generate the source code for the project. The generated prompt should be highly detailed and instruct the coding AI to: 1. Choose an appropriate, modern technology stack. 2. Structure the project with a clean, scalable architecture. 3. Implement all specified features and functionalities from the design. 4. Include comprehensive error handling, logging, and security measures. 5. Generate unit and integration tests. 6. Create a README.md file with setup and deployment instructions.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
+                  userPrompt = `Based on the complete project documentation provided below, your task is to synthesize all technical information into a single, comprehensive, and expert-level prompt for an AI coding assistant. This final prompt must be a self-contained technical brief that enables the coding AI to generate the full source code for the project without needing to reference the original documents again.
+
+The generated prompt must:
+1.  **Synthesize and Structure**: Do not just copy-paste. Analyze all provided documents (requirements, design specs, trade studies, FMEA, etc.) and distill them into a clear, logical structure.
+2.  **Define the Architecture**: Propose a specific, modern technology stack suitable for the project's disciplines (e.g., for a web service: Python/FastAPI backend, React/TypeScript frontend, PostgreSQL database, Docker for containerization). Justify the choices. Describe a clean, scalable architecture (e.g., layered architecture, microservices).
+3.  **Detail Core Logic and Functionality**: Enumerate every feature, function, and user story. For each, describe the required inputs, processing logic, and expected outputs. Include details on algorithms, state management, and data transformations.
+4.  **Specify Data Models**: Define the complete database schema or data structures, including tables, fields, data types, relationships, and constraints.
+5.  **Outline APIs**: If applicable, define the complete REST or GraphQL API endpoints, including HTTP methods, URL paths, request payloads, and example success/error responses.
+6.  **Detail Non-Functional Requirements**: Explicitly list all performance, security, reliability, and scalability requirements derived from the documentation.
+7.  **Provide a Testing Strategy**: Instruct the coding AI to generate comprehensive unit, integration, and end-to-end tests. Specify key scenarios to cover.
+8.  **Include a Deployment Plan**: Outline the steps for setting up the development environment and deploying the application, including a detailed README.md file structure.
+
+The final output should be a single Markdown document that is the ultimate source of truth for the AI code generator.
+
+---
+
+## Full Project Documentation:
+
+${fullContext}`;
                   fileName = `${project.name}_vibe_coding_prompt`;
                   downloadFn = downloadMarkdownFile;
                   break;
               case 'simulation':
                   systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate a *simulation* of an engineering project based on its documentation.";
-                  userPrompt = `Based on the complete project documentation provided below, generate a single, comprehensive and expert-level prompt in Markdown format. This new prompt will be given to an AI coding assistant to build a functional simulation of the designed system. The generated prompt should instruct the coding AI to: 1. Focus on accurately modeling the system's behavior, logic, and interactions based on the specifications. 2. Create a simple, interactive user interface (if applicable) to control simulation parameters and visualize the results. 3. Implement key performance indicators (KPIs) and data logging to analyze the system's performance under different conditions. 4. The simulation does not need to be production-ready code, but it must be a valid representation of the design.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
+                  userPrompt = `Based on the complete project documentation provided below, your task is to synthesize all technical information into a single, comprehensive, and expert-level prompt for an AI coding assistant to build a functional *simulation* of the designed system. This final prompt must be a self-contained technical brief for building the simulation, not the production system itself.
+
+The generated prompt must instruct the coding AI to:
+1.  **Identify Key Systems & Variables**: Analyze the documentation to identify the critical components, systems, and physical/logical processes to be modeled. List the key state variables, parameters, and inputs that will drive the simulation.
+2.  **Define the Simulation Model**: Propose a suitable simulation paradigm (e.g., discrete-event simulation, agent-based modeling, system dynamics). Specify the core algorithms, mathematical models, and state transition logic that will govern the simulation's behavior based on the design documents.
+3.  **Propose a Technology Stack**: Suggest a technology stack suitable for simulation and visualization (e.g., Python with libraries like SimPy, NumPy, and Matplotlib/Plotly for plotting, or a web-based stack like React/Three.js for 3D visualization).
+4.  **Design the User Interface (UI)**: Describe a simple, interactive UI that allows a user to:
+    *   Set initial conditions and parameters.
+    *   Start, stop, and pause the simulation.
+    *   Visualize the system's state in real-time through charts, graphs, or a simple graphical representation.
+5.  **Specify Data Logging & KPIs**: Define the key performance indicators (KPIs) and data points that must be logged during the simulation run. The goal is to analyze the system's performance, identify bottlenecks, and validate the design against its requirements.
+6.  **Structure the Code**: Outline a clear code structure for the simulation, separating the simulation engine from the UI and data logging components.
+7.  **Focus on Representation, not Production**: Emphasize that the simulation code should be a valid functional representation of the design, but does not need to be production-ready, highly optimized, or scalable.
+
+The final output should be a single Markdown document that provides a complete blueprint for an AI to code the simulation.
+
+---
+
+## Full Project Documentation:
+
+${fullContext}`;
                   fileName = `${project.name}_simulation_prompt`;
                   downloadFn = downloadMarkdownFile;
                   break;
               case 'summary':
                   systemInstruction = "You are a project management AI assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON format, including a schema description within the JSON itself.";
                   userPrompt = `Parse the following complete project documentation and generate a single JSON object. This JSON object must strictly adhere to the provided schema, containing two top-level keys: 'schema' and 'data'. The 'schema' object must contain string descriptions for each field that will appear in the 'data' object. The 'data' object must contain the extracted project summary, a complete list of all generated documents, and a complete list of all sprints.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
-                  config.config = {
+                  genConfig = {
                       responseMimeType: "application/json",
                       responseSchema: {
                           type: Type.OBJECT,
@@ -542,16 +667,90 @@ ${project.constraints}
                   fileName = `${project.name}_design_summary_and_sprints_prompt`;
                   downloadFn = downloadJsonFile;
                   break;
-          }
+                case 'pm-data-pack':
+                    systemInstruction = "You are an expert AI project management assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON data pack suitable for import into a project management system.";
+                    userPrompt = `Based on the complete project documentation provided below, generate a single JSON object that serves as a data pack for a project management system.
 
-          const response = await ai.models.generateContent({
-              ...config,
-              contents: userPrompt,
-              config: { ...config.config, systemInstruction }
-          });
+The JSON object must contain:
+1.  **projectName**: The name of the project.
+2.  **projectSummary**: A concise, one-paragraph summary of the project's goals, requirements, and constraints.
+3.  **workBreakdownStructure**: A hierarchical breakdown of the project. This should be an array of phase objects. Each phase object must include its name, description, and a nested array of its associated sprints (with sprint name, description, and current status).
+4.  **documentArtifacts**: A flat array of strings, listing the titles of all generated documents (both main phase specifications and sprint-specific documents).
+5.  **sprintsList**: A flat array of all sprint objects, where each object includes the sprint name, its parent phase name, and its description. This is for easy import as tasks.
+
+---
+
+## Full Project Documentation:
+
+${fullContext}`;
+                    genConfig = {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                projectName: { type: Type.STRING, description: "The official name of the project." },
+                                projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals, requirements, and constraints." },
+                                workBreakdownStructure: {
+                                    type: Type.ARRAY,
+                                    description: "A hierarchical breakdown of project phases and their sprints.",
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            phaseName: { type: Type.STRING },
+                                            phaseDescription: { type: Type.STRING },
+                                            sprints: {
+                                                type: Type.ARRAY,
+                                                items: {
+                                                    type: Type.OBJECT,
+                                                    properties: {
+                                                        sprintName: { type: Type.STRING },
+                                                        sprintDescription: { type: Type.STRING },
+                                                        status: { type: Type.STRING }
+                                                    },
+                                                    required: ["sprintName", "sprintDescription", "status"]
+                                                }
+                                            }
+                                        },
+                                        required: ["phaseName", "phaseDescription", "sprints"]
+                                    }
+                                },
+                                documentArtifacts: {
+                                    type: Type.ARRAY,
+                                    description: "A list of all generated document titles.",
+                                    items: { type: Type.STRING }
+                                },
+                                sprintsList: {
+                                    type: Type.ARRAY,
+                                    description: "A flat list of all sprints for easy import as tasks.",
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            sprintName: { type: Type.STRING },
+                                            phase: { type: Type.STRING },
+                                            description: { type: Type.STRING }
+                                        },
+                                        required: ["sprintName", "phase", "description"]
+                                    }
+                                }
+                            },
+                            required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
+                        }
+                    };
+                    fileName = `${project.name}_PM_Data_Pack`;
+                    downloadFn = downloadJsonFile;
+                    break;
+          }
+          
+          const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
+          // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+          const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: combinedContents,
+              config: genConfig
+          }));
           
           let contentToDownload = response.text;
-          if (type === 'summary') {
+          if (type === 'summary' || type === 'pm-data-pack') {
               try {
                   const parsed = JSON.parse(response.text);
                   contentToDownload = JSON.stringify(parsed, null, 2);
@@ -563,7 +762,7 @@ ${project.constraints}
           downloadFn(contentToDownload, fileName);
           setToast({ message: `${fileName} generated and downloaded successfully.`, type: 'success' });
 
-      } catch (error) {
+      } catch (error: any) {
           console.error('Failed to generate content:', error);
           setToast({ message: `Failed to generate: ${error.message}`, type: 'error' });
       } finally {
@@ -590,8 +789,9 @@ ${project.constraints}
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex-shrink-0">Project Exports</h3>
                     <div className="flex-grow border-t border-gray-200 dark:border-gray-700 sm:border-t-0 sm:border-l sm:pl-4">
                         <div className="flex items-center gap-2 flex-wrap justify-start">
-                            <Button onClick={downloadAllAsZip} disabled={!hasAnyDocuments || isGenerating}>
-                                <Archive className="mr-2 w-4 h-4" /> Download All as .zip
+                            <Button onClick={handleDownloadZip} disabled={!hasAnyDocuments || isGenerating || isZipping}>
+                                {isZipping ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Archive className="mr-2 w-4 h-4" />}
+                                Download All as .zip
                             </Button>
                             <Button onClick={() => handleGenerateAndDownload('vibe-coding')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download vibe coding prompt.">
                                 {isGenerating && generationTarget === 'vibe-coding' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Bot className="mr-2 w-4 h-4" />}
@@ -605,11 +805,15 @@ ${project.constraints}
                                 {isGenerating && generationTarget === 'summary' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <FileJson className="mr-2 w-4 h-4" />}
                                 Generate Design Summary Prompt
                             </Button>
+                             <Button onClick={() => handleGenerateAndDownload('pm-data-pack')} disabled={!hasAnyDocuments || isGenerating} title="Generate and download a JSON data pack for project management systems.">
+                                {isGenerating && generationTarget === 'pm-data-pack' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Ticket className="mr-2 w-4 h-4" />}
+                                Generate PM Data Pack
+                            </Button>
                         </div>
                     </div>
                 </div>
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 pl-2">
-                    Use these tools to package your project for hand-off. <strong>Download All</strong> creates a complete project archive. The <strong>Generate</strong> buttons create specialized prompts for AI coding assistants (implementation and simulation) and a structured JSON summary for project management.
+                    Use these tools to package your project for hand-off. <strong>Download All</strong> creates a complete project archive. The <strong>Generate</strong> buttons create specialized outputs for AI coding assistants, project management systems, and high-level summaries.
                 </p>
            </div>
         </Card>
@@ -640,10 +844,10 @@ ${project.constraints}
                         <FileText className="w-6 h-6 text-blue-500" />
                         <div>
                           <p className="text-sm font-medium text-gray-900 dark:text-white">Main Specification</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{phase.output.length.toLocaleString()} characters</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{phase.output!.length.toLocaleString()} characters</p>
                         </div>
                       </div>
-                      <Button variant={phase.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(phase.output, `${project.name}_${phase.name}`)}>
+                      <Button variant={phase.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(phase.output!, `${project!.name}_${phase.name}`)}>
                         <Download className="mr-2 w-4 h-4" /> Download .md
                       </Button>
                     </li>
@@ -654,10 +858,10 @@ ${project.constraints}
                           <FileText className="w-6 h-6 text-indigo-500" />
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-white">Sprint: {sprint.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{sprint.output.length.toLocaleString()} characters</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{sprint.output!.length.toLocaleString()} characters</p>
                           </div>
                         </div>
-                        <Button variant={sprint.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(sprint.output, `${project.name}_${phase.name}_${sprint.name}`)}>
+                        <Button variant={sprint.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(sprint.output!, `${project!.name}_${phase.name}_${sprint.name}`)}>
                           <Download className="mr-2 w-4 h-4" /> Download .md
                         </Button>
                       </li>
@@ -672,11 +876,22 @@ ${project.constraints}
   );
 };
 
+// FIX: Added props type for Dashboard
+interface DashboardProps {
+  project: Project;
+  onSelectPhase: (index: number) => void;
+  onViewDocuments: () => void;
+  theme: string;
+  setTheme: (theme: string) => void;
+  apiKey: string | null;
+  setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
+}
 
-const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme }) => {
+const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme, apiKey, setToast }: DashboardProps) => {
+  const [isZipping, setIsZipping] = useState(false);
   const completedPhases = project.phases.filter(p => p.status === 'completed').length;
   const progress = (completedPhases / project.phases.length) * 100;
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status: Phase['status']) => {
     switch (status) {
       case 'completed': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'in-progress': return <Clock className="w-5 h-5 text-yellow-500" />;
@@ -687,56 +902,10 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme })
 
   const firstIncompleteIndex = project.phases.findIndex(p => p.status !== 'completed');
   
-  const downloadAllAsZip = async () => {
-    const JSZip = (window as any).JSZip;
-    if (!JSZip) {
-      console.error("JSZip library not found.");
-      return;
-    }
-    const zip = new JSZip();
-
-    const summaryContent = `
-# Project Summary: ${project.name}
-
-## Disciplines
-- ${project.disciplines.join('\n- ')}
-
-## Requirements
-${project.requirements}
-
-## Constraints
-${project.constraints}
-    `;
-    zip.file("00_Project_Summary.md", summaryContent.trim());
-
-    project.phases.forEach((phase, index) => {
-      const phaseNumber = String(index + 1).padStart(2, '0');
-      const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
-      
-      const phaseFolder = zip.folder(phaseFolderName);
-
-      if (phase.output) {
-        phaseFolder.file(`_Phase_Specification.md`, phase.output);
-      }
-
-      if (phase.sprints && phase.sprints.length > 0) {
-        phase.sprints.forEach(sprint => {
-          if (sprint.output) {
-            phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
-          }
-        });
-      }
-    });
-
-    const content = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(content);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadZip = async () => {
+    setIsZipping(true);
+    await generateProjectZip(project, apiKey, setToast);
+    setIsZipping(false);
   };
 
   return (
@@ -744,8 +913,9 @@ ${project.constraints}
       <div className="flex items-center justify-between mb-6">
          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
          <div className="flex items-center gap-2">
-            <Button onClick={downloadAllAsZip}>
-                <Archive className="mr-2 w-4 h-4" /> Download Project Archive
+            <Button onClick={handleDownloadZip} disabled={isZipping}>
+                {isZipping ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Archive className="mr-2 w-4 h-4" />}
+                Download Project Archive
             </Button>
            <Button variant="ghost" onClick={onViewDocuments}>
                <BookOpen className="mr-2 w-4 h-4" /> View Documents
@@ -797,8 +967,13 @@ ${project.constraints}
   );
 };
 
-
-const Toast = ({ message, type, onDismiss }) => {
+// FIX: Added props type for Toast
+interface ToastProps {
+  message: string;
+  type: 'success' | 'error';
+  onDismiss: () => void;
+}
+const Toast = ({ message, type, onDismiss }: ToastProps) => {
     const baseClasses = 'fixed top-5 right-5 z-[150] max-w-sm w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black dark:ring-gray-700 ring-opacity-5 overflow-hidden transition-all duration-300 transform';
     const typeClasses = {
         success: 'border-green-500',
@@ -836,8 +1011,7 @@ const EngineeringPartnerApp = () => {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [isKeyValidated, setIsKeyValidated] = useState(false);
+  // FIX: Removed API key state management from UI to align with guidelines.
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -849,44 +1023,19 @@ const EngineeringPartnerApp = () => {
     }
   }, [toast]);
   
-  const handleValidateKey = async (key: string, type: 'user' | 'promo') => {
-      if (type === 'promo') {
-          if (key === 'rm2214ri') {
-              if (process.env.API_KEY) {
-                  setApiKey(process.env.API_KEY);
-                  setIsKeyValidated(true);
-                  setToast({ message: 'Promo code accepted! You can now start a project.', type: 'success' });
-              } else {
-                  setToast({ message: 'Promo code is valid, but the application is missing its primary API key.', type: 'error' });
-              }
-          } else {
-              setToast({ message: 'Invalid promo code.', type: 'error' });
-          }
-      } else { // type === 'user'
-          try {
-              const ai = new GoogleGenAI({ apiKey: key });
-              await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'Hi' });
-              setApiKey(key);
-              setIsKeyValidated(true);
-              setToast({ message: 'API Key validated successfully! You can now start a project.', type: 'success' });
-          } catch (error) {
-              console.error("API Key validation failed:", error);
-              setToast({ message: 'The provided API Key is invalid or has insufficient permissions.', type: 'error' });
-          }
-      }
-  };
-
-  const handleProjectCreated = (project) => {
+  // FIX: Removed handleValidateKey to comply with API key guidelines.
+  
+  const handleProjectCreated = (project: Project) => {
     setCurrentProject(project);
     setCurrentView('dashboard');
   };
 
-  const handleSelectPhase = (index) => {
+  const handleSelectPhase = (index: number) => {
     setSelectedPhaseIndex(index);
     setCurrentView('phase');
   };
 
-  const handleUpdatePhase = (phaseId, updates) => {
+  const handleUpdatePhase = (phaseId: string, updates: Partial<Phase>) => {
     setCurrentProject(prevProject => {
       if (!prevProject) return null;
       const newPhases = prevProject.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
@@ -908,11 +1057,11 @@ const EngineeringPartnerApp = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'landing':
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} isKeyValidated={isKeyValidated} onKeyValidated={handleValidateKey} setToast={setToast} />;
+        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
       case 'wizard':
         return <ProjectWizard onProjectCreated={handleProjectCreated} onCancel={() => setCurrentView('landing')} />;
       case 'dashboard':
-        return currentProject && <Dashboard project={currentProject} onSelectPhase={handleSelectPhase} onViewDocuments={() => setCurrentView('documents')} theme={theme} setTheme={setTheme} />;
+        return currentProject && <Dashboard project={currentProject} onSelectPhase={handleSelectPhase} onViewDocuments={() => setCurrentView('documents')} theme={theme as string} setTheme={setTheme} apiKey={process.env.API_KEY || null} setToast={setToast} />;
       case 'phase':
         return currentProject && selectedPhaseIndex !== null && (
           <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -924,14 +1073,14 @@ const EngineeringPartnerApp = () => {
               phase={currentProject.phases[selectedPhaseIndex]}
               onUpdatePhase={handleUpdatePhase}
               disciplines={currentProject.disciplines}
-              apiKey={apiKey}
+              apiKey={process.env.API_KEY || null}
             />
           </div>
         );
       case 'documents':
-        return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} apiKey={apiKey} setToast={setToast} />;
+        return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} apiKey={process.env.API_KEY || null} setToast={setToast} />;
       default:
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme} setTheme={setTheme} isKeyValidated={isKeyValidated} onKeyValidated={handleValidateKey} setToast={setToast} />;
+        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
     }
   };
 
@@ -951,5 +1100,5 @@ const EngineeringPartnerApp = () => {
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(<React.StrictMode><EngineeringPartnerApp /></React.StrictMode>);

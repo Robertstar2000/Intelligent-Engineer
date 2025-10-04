@@ -1,9 +1,8 @@
 import React from 'react';
 import { Card } from './ui';
 
-// FIX: Added explicit types to props to correctly infer the type of `value` from `settings`.
-export const TuningControls = ({ settings, onChange }: { settings: { [key: string]: number | string | boolean }, onChange: (key: string, value: string | number) => void }) => (
-  <Card title="Tuning Controls" description="Adjust parameters to customize AI output">
+export const TuningControls = ({ settings, onChange, title = "Tuning Controls", description = "Adjust parameters to customize AI output" }: { settings: { [key: string]: number | string | boolean }, onChange: (key: string, value: string | number) => void, title?: string, description?: string }) => (
+  <Card title={title} description={description}>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {Object.entries(settings).map(([key, value]) => (
         <div key={key} className="space-y-2">

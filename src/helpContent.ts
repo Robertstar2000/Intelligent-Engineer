@@ -103,4 +103,37 @@ On the landing page, there is a dedicated section titled **"API Key Access."** T
 
 -   **Security**: The user-provided API key is handled securely. It is only held in the application's JavaScript memory for the duration of the browser session. It is not stored in \`localStorage\`, cookies, or the IndexedDB database, ensuring it does not persist on the user's machine after they close the tab.
 -   **UI Gating**: The application's state (\`isKeyValidated\`) tracks whether a valid key has been provided. Core functions like starting a new experiment or navigating to the dashboard are disabled until this state is true. If a user attempts an action without a validated key, a warning message is shown, and the page automatically scrolls them to the "API Key Access" section, guiding them to complete the required step.
+
+## 6. Project Exports & Handoff
+
+Once you have generated documentation for your project, the **Documents** page provides powerful tools to package and hand off your work. These exports are designed to integrate with other tools and workflows, from project management software to AI-powered coding assistants.
+
+### A) Project Archive (.zip)
+
+-   **What it is**: A complete archive of all generated documentation in a single \`.zip\` file.
+-   **Structure**: The archive is neatly organized into folders, one for each phase of your project. It also includes a top-level \`00_Project_Summary.md\` file containing your initial requirements, constraints, and disciplines.
+-   **Value**: This is the perfect way to create a permanent, offline record of your project. It's ideal for version control, sharing with stakeholders, or meeting compliance requirements.
+
+### B) Design Summary (Project Management)
+
+-   **What it is**: A structured JSON file containing a concise summary of your project's design, a complete list of all generated documents, and a detailed list of all development sprints.
+-   **How it works**: The application uses the Gemini API to intelligently parse all your generated documentation and extract the key project management data into a clean, machine-readable format.
+-   **Value**: This file is an accelerator for project management. You can use it to:
+    -   Quickly import tasks and sprints into tools like Jira, Asana, or Trello.
+    -   Provide a high-level summary for executive briefings.
+    -   Automate the creation of project tracking dashboards.
+
+### C) Vibe Prompts (AI Code Generation)
+
+The term "vibe prompt" refers to a highly detailed, context-rich prompt that is designed to be given to another AI model, specifically one that generates code (like a "vibe code IDE"). These prompts act as a bridge between your detailed engineering design and the actual implementation.
+
+-   **Generate Vibe Coding Prompt**:
+    -   **What it is**: This generates a comprehensive "technical brief" prompt that instructs an AI coding assistant to write the full, production-ready source code for your project.
+    -   **How it works**: It intelligently synthesizes all your project's documentation into a single, expert-level set of instructions. This isn't just a summary; it's a complete technical specification that directs the coding AI to define the architecture, detail all core logic and data models, specify APIs, and outline testing and deployment strategies.
+    -   **Value**: This dramatically accelerates development. Instead of a developer interpreting pages of documentation, they can feed this single, self-contained prompt to a coding AI to get a robust, feature-complete, and well-architected starting point for the codebase.
+
+-   **Generate Simulation Prompt**:
+    -   **What it is**: This generates a prompt focused on creating a functional *simulation* of your designed system, rather than production code.
+    -   **How it works**: It instructs a coding AI to model the system's behavior, logic, and interactions. It directs the AI to identify key variables, define the simulation model, design a simple UI for control and visualization, and specify data logging for performance analysis (KPIs).
+    -   **Value**: Simulations are invaluable for de-risking complex projects. They allow you to validate your design choices, identify potential bottlenecks, and demonstrate the system's functionality to stakeholders long before you build physical hardware or write production software. This prompt ensures the simulation is technically sound and useful for analysis.
 `;

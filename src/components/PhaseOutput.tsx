@@ -5,6 +5,33 @@ import { Remarkable } from 'remarkable';
 
 declare const Prism: any;
 
+// FIX: Added type definitions, as they can't be imported from index.tsx without creating circular dependencies or new files.
+interface Sprint {
+  id:string;
+  name: string;
+  description: string;
+  status: 'not-started' | 'in-progress' | 'completed';
+  deliverables: string[];
+  output?: string;
+}
+interface TuningSettings {
+  [key: string]: number | string | boolean;
+}
+interface Phase {
+  id: string;
+  name: string;
+  description: string;
+  status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
+  sprints: Sprint[];
+  tuningSettings: TuningSettings;
+  output?: string;
+  isEditable: boolean;
+  designReview?: {
+    required: boolean;
+    checklist: { id: string; text: string; checked: boolean }[];
+  };
+}
+
 const md = new Remarkable({
     html: true,
     typographer: true,
@@ -20,7 +47,17 @@ const md = new Remarkable({
     },
 });
 
-export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true }) => {
+// FIX: Added props type for PhaseOutput, including apiKey to remove process.env dependency.
+interface PhaseOutputProps {
+    phase: Phase;
+    onGenerate: () => void;
+    onSave: (output: string) => void;
+    isLoading: boolean;
+    isEditable?: boolean;
+    apiKey: string | null;
+}
+
+export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true, apiKey }: PhaseOutputProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutput, setEditedOutput] = useState(phase.output || '');
 
@@ -51,7 +88,8 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                 {!phase.output ? (
                     <div className="text-center py-8">
                         <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
-                        <Button onClick={onGenerate} disabled={!process.env.API_KEY || isLoading}>
+                        {/* FIX: Use apiKey prop instead of process.env.API_KEY */}
+                        <Button onClick={onGenerate} disabled={!apiKey || isLoading}>
                             {isLoading ? (
                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>
                             ) : (
@@ -69,7 +107,8 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                                             <Edit3 className="mr-2 w-4 h-4" />Edit
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={onGenerate} disabled={!process.env.API_KEY || isLoading}>
+                                        {/* FIX: Use apiKey prop instead of process.env.API_KEY */}
+                                        <Button variant="outline" size="sm" onClick={onGenerate} disabled={!apiKey || isLoading}>
                                             {isLoading ? (
                                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>Regenerating...</>
                                             ) : (

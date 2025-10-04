@@ -1,5 +1,8 @@
+
+
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
+// FIX: Import GenerateContentResponse to correctly type API call results.
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Remarkable } from 'remarkable';
 import { Sliders, Edit3, Save, Play, Check, Combine, RefreshCw, FileText } from 'lucide-react';
 
@@ -13,6 +16,63 @@ import { Button, Card, Badge } from './ui';
 
 declare const Prism: any;
 
+// FIX: Added type definitions locally to avoid creating new files, resolving numerous type errors.
+interface Sprint {
+  id:string;
+  name: string;
+  description: string;
+  status: 'not-started' | 'in-progress' | 'completed';
+  deliverables: string[];
+  output?: string;
+}
+
+interface TuningSettings {
+  [key: string]: number | string | boolean;
+}
+
+interface Phase {
+  id: string;
+  name: string;
+  description: string;
+  status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
+  sprints: Sprint[];
+  tuningSettings: TuningSettings;
+  output?: string;
+  isEditable: boolean;
+  designReview?: {
+    required: boolean;
+    checklist: { id: string; text: string; checked: boolean }[];
+  };
+}
+
+interface Project {
+  id: string;
+  name: string;
+  requirements: string;
+  constraints: string;
+  disciplines: string[];
+  developmentMode: 'full' | 'rapid';
+  currentPhase: number;
+  phases: Phase[];
+  createdAt: Date;
+}
+
+
+// --- HELPER FUNCTION ---
+// FIX: Added generic types and type for catch block error to resolve TypeScript errors.
+const withRetry = async <T,>(fn: () => Promise<T>, retries = 1): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries > 0) {
+      console.warn('API call failed, retrying...', error);
+      await new Promise(res => setTimeout(res, 1000)); // Add a 1s delay for transient issues
+      return withRetry(fn, retries - 1);
+    }
+    throw error;
+  }
+};
+
 const md = new Remarkable({
     html: true, typographer: true,
     highlight: function (str, lang) {
@@ -23,7 +83,13 @@ const md = new Remarkable({
     },
 });
 
-const DesignReviewChecklist = ({ checklist, onCheckChange, onFinalize }) => {
+// FIX: Added props type for DesignReviewChecklist
+interface DesignReviewChecklistProps {
+    checklist: { id: string; text: string; checked: boolean }[];
+    onCheckChange: (id: string) => void;
+    onFinalize: () => void;
+}
+const DesignReviewChecklist = ({ checklist, onCheckChange, onFinalize }: DesignReviewChecklistProps) => {
     const allChecked = checklist.every(item => item.checked);
     return (
         <Card title="Design Review" description="Verify all success factors are met before proceeding. The project cannot advance until this review is complete.">
@@ -49,15 +115,24 @@ const DesignReviewChecklist = ({ checklist, onCheckChange, onFinalize }) => {
     );
 };
 
+// FIX: Added props type for PhaseView
+interface PhaseViewProps {
+    phase: Phase;
+    onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
+    disciplines: string[];
+    project: Project;
+    apiKey: string | null;
+}
 
-export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project, apiKey }) => {
+// FIX: Exported PhaseView component to make it available for import in other files.
+export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project, apiKey }: PhaseViewProps) => {
     const [isLoading, setIsLoading] = useState(false);
-    const [loadingSprint, setLoadingSprint] = useState(null);
+    const [loadingSprint, setLoadingSprint] = useState<string | null>(null);
     const [generationError, setGenerationError] = useState('');
-    const [editingSprintId, setEditingSprintId] = useState(null);
+    const [editingSprintId, setEditingSprintId] = useState<string | null>(null);
     const [editedSprintOutput, setEditedSprintOutput] = useState('');
     const [editedSprintDeliverablesText, setEditedSprintDeliverablesText] = useState('');
-    const [loadingDocId, setLoadingDocId] = useState(null);
+    const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
 
     useEffect(() => {
         if (typeof Prism !== 'undefined') {
@@ -66,12 +141,12 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project, api
     }, [phase, editingSprintId]);
 
 
-    const handleUpdateTuning = (key, value) => {
+    const handleUpdateTuning = (key: string, value: string | number) => {
         const newSettings = { ...phase.tuningSettings, [key]: value };
         onUpdatePhase(phase.id, { tuningSettings: newSettings });
     };
 
-    const handleSaveOutput = (newOutput) => {
+    const handleSaveOutput = (newOutput: string) => {
         onUpdatePhase(phase.id, { output: newOutput });
     };
 
@@ -79,18 +154,29 @@ export const PhaseView = ({ phase, onUpdatePhase, disciplines = [], project, api
         setIsLoading(true);
         setGenerationError('');
         try {
+            if (!apiKey) { throw new Error("API Key is not provided"); }
             const disciplineText = disciplines.length > 0 ? disciplines.join(', ') : 'General Engineering';
-            const systemInstruction = `You are an expert AI engineering assistant. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints.
+            let systemInstruction = `You are an expert AI engineering assistant. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints.
 1. Create a comprehensive preliminary design specification in Markdown format.
 2. Define a list of 3-5 distinct development sprints required to implement the design. Two of these sprints MUST be named 'Design for Manufacturing and Assembly (DFMA)' and 'Failure Modes and Effects Analysis (FMEA)'. The DFMA sprint should focus on optimizing the design for production. The FMEA sprint should focus on systematically identifying and mitigating potential failures. Each sprint should have a clear name and a concise description of its goal.
 3. Provide the output in a structured JSON format.`;
             
+            if (project.developmentMode === 'rapid') {
+                systemInstruction += "\n\nIMPORTANT: Respond in a brief, accurate, and cryptic manner. Use bullet lists and concise language suitable for rapid prototyping. Avoid verbose explanations.";
+            }
+
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplineText}
+
 ### Project Requirements:
+\`\`\`text
 ${project?.requirements || 'Not specified'}
+\`\`\`
+
 ### Project Constraints:
+\`\`\`text
 ${project?.constraints || 'Not specified'}
+\`\`\`
 
 ## Current Phase: Critical Design
 ### Description: ${phase.description}
@@ -98,12 +184,13 @@ ${project?.constraints || 'Not specified'}
 ## Task:
 Generate the preliminary design specification and a list of development sprints based on the project details.`;
 
+            const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
             const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
+            // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+            const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: userPrompt,
+                contents: combinedContents,
                 config: {
-                    systemInstruction,
                     responseMimeType: "application/json",
                     responseSchema: {
                         type: Type.OBJECT,
@@ -120,15 +207,17 @@ Generate the preliminary design specification and a list of development sprints 
                                         name: { type: Type.STRING },
                                         description: { type: Type.STRING },
                                     },
+                                    required: ["name", "description"],
                                 },
                             },
                         },
+                        required: ["preliminarySpec", "sprints"]
                     },
                 },
-            });
+            }));
 
             const resultJson = JSON.parse(response.text);
-            const newSprints = resultJson.sprints.map((s, index) => ({
+            const newSprints: Sprint[] = resultJson.sprints.map((s: any, index: number) => ({
                 id: `${phase.id}-${index + 1}`,
                 name: s.name,
                 description: s.description,
@@ -142,7 +231,7 @@ Generate the preliminary design specification and a list of development sprints 
                 sprints: newSprints,
                 status: 'in-progress',
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to generate output:', error);
             setGenerationError(error.message || 'An unknown error occurred.');
         } finally {
@@ -150,10 +239,11 @@ Generate the preliminary design specification and a list of development sprints 
         }
     };
 
-    const generateSprintOutput = async (sprintId) => {
+    const generateSprintOutput = async (sprintId: string) => {
         setLoadingSprint(sprintId);
         setGenerationError('');
         try {
+            if (!apiKey) { throw new Error("API Key is not provided"); }
             const sprint = phase.sprints.find(s => s.id === sprintId);
             if (!sprint) return;
             
@@ -184,17 +274,29 @@ Generate the preliminary design specification and a list of development sprints 
 6.  Provide the output in a structured JSON format according to the provided schema.`;
             }
 
+            if (project.developmentMode === 'rapid') {
+                systemInstruction += "\n\nIMPORTANT: Respond in a brief, accurate, and cryptic manner. Use bullet lists and concise language suitable for rapid prototyping. Avoid verbose explanations.";
+            }
+
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplines.join(', ')}
+
 ### Project Requirements:
+\`\`\`text
 ${project?.requirements || 'Not specified'}
+\`\`\`
+
 ### Project Constraints:
+\`\`\`text
 ${project?.constraints || 'Not specified'}
+\`\`\`
 
 ---
 
 ## Preliminary Design Specification (Context):
+\`\`\`markdown
 ${phase.output}
+\`\`\`
 
 ---
 
@@ -204,12 +306,13 @@ ${phase.output}
 ## Task:
 Generate the detailed technical specification and a list of key deliverables in JSON format for this sprint.`;
             
+            const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
             const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
+            // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+            const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: userPrompt,
+                contents: combinedContents,
                 config: { 
-                    systemInstruction,
                     responseMimeType: "application/json",
                     responseSchema: {
                         type: Type.OBJECT,
@@ -226,18 +329,20 @@ Generate the detailed technical specification and a list of key deliverables in 
                                 description: "A concise list of tangible deliverables for the sprint, derived from the technical specification.",
                             },
                         },
+                        required: ["technicalSpec", "deliverables"]
                     },
                 }
-            });
+            }));
             
             const resultJson = JSON.parse(response.text);
 
-            const updatedSprints = phase.sprints.map(s => 
+            // FIX: Added explicit return type to map to resolve type inference error.
+            const updatedSprints = phase.sprints.map((s): Sprint => 
                 s.id === sprintId ? { ...s, output: resultJson.technicalSpec, deliverables: resultJson.deliverables, status: 'in-progress' } : s
             );
             onUpdatePhase(phase.id, { sprints: updatedSprints });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to generate sprint output:', error);
             setGenerationError(error.message || 'An unknown error occurred.');
         } finally {
@@ -245,12 +350,13 @@ Generate the detailed technical specification and a list of key deliverables in 
         }
     };
 
-    const handleMergeSprint = (sprintId) => {
+    const handleMergeSprint = (sprintId: string) => {
         const sprint = phase.sprints.find(s => s.id === sprintId);
         if (!sprint || !sprint.output) return;
 
         const mergedOutput = `${phase.output}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n**Technical Specification:**\n\n${sprint.output}`;
-        const updatedSprints = phase.sprints.map(s => 
+        // FIX: Added explicit return type to map to resolve type inference error.
+        const updatedSprints = phase.sprints.map((s): Sprint => 
             s.id === sprintId ? { ...s, status: 'completed' } : s
         );
 
@@ -291,12 +397,12 @@ Generate the detailed technical specification and a list of key deliverables in 
             
             const mostRecentPhase = previousPhases.length > 0 ? previousPhases[previousPhases.length - 1] : null;
             const contextSection = mostRecentPhase 
-                ? `\n\n---\n\n## Context from Previous Phase (${mostRecentPhase.name}):\n${mostRecentPhase.output}` 
+                ? `\n\n---\n\n## Context from Previous Phase (${mostRecentPhase.name}):\n\`\`\`markdown\n${mostRecentPhase.output}\n\`\`\`` 
                 : '';
 
             const tuningSection = Object.entries(phase.tuningSettings).map(([key, value]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}: ${value}${typeof value === 'number' ? '%' : ''}`).join('\n');
 
-            const systemInstruction = `You are an expert AI engineering assistant. Your task is to generate a comprehensive, professional engineering document for a specific project phase. The output must be:
+            let systemInstruction = `You are an expert AI engineering assistant. Your task is to generate a comprehensive, professional engineering document for a specific project phase. The output must be:
 1. Tailored to the selected engineering disciplines.
 2. Based on the project requirements, constraints, and context from previous phases.
 3. Adhere to the provided tuning settings to guide the tone, focus, and detail of the output.
@@ -304,15 +410,23 @@ Generate the detailed technical specification and a list of key deliverables in 
 5. Provide clear rationale for all significant decisions.
 6. Be well-structured, formatted in Markdown for clarity, and ready for professional use.
 7. Address the current phase directly and comprehensively.`;
+            
+            if (project.developmentMode === 'rapid') {
+                systemInstruction += "\n\nIMPORTANT: Respond in a brief, accurate, and cryptic manner. Use bullet lists and concise language suitable for rapid prototyping. Avoid verbose explanations.";
+            }
 
             const userPrompt = `## Project: ${project?.name || 'Unnamed Project'}
 ### Engineering Disciplines: ${disciplineText}
 
 ### Project Requirements:
+\`\`\`text
 ${project?.requirements || 'Not specified'}
+\`\`\`
 
 ### Project Constraints:
+\`\`\`text
 ${project?.constraints || 'Not specified'}
+\`\`\`
 ${contextSection}
 
 ---
@@ -332,17 +446,18 @@ Generate the complete engineering documentation in Markdown format for the **${p
             if (userPrompt.length > MAX_PROMPT_CHARACTERS) {
                 throw new Error(`The generated prompt is too long (${userPrompt.length} characters), exceeding the ${MAX_PROMPT_CHARACTERS} character limit. Please try to shorten project requirements, constraints, or the output from the previous phase.`);
             }
-
+            
+            const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
             const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
+            // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+            const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: userPrompt,
-                config: { systemInstruction: systemInstruction }
-            });
+                contents: combinedContents,
+            }));
 
             const text = response.text;
             onUpdatePhase(phase.id, { output: text, status: 'in-progress' });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to generate output:', error);
             setGenerationError(error.message || 'An unknown error occurred.');
         } finally {
@@ -371,32 +486,46 @@ Generate the complete engineering documentation in Markdown format for the **${p
         URL.revokeObjectURL(url);
     };
 
-    const generateDesignReviewChecklist = async (documentForReview) => {
-        const systemInstruction = `You are a Principal Systems Engineer AI specializing in formal design gate reviews. Your task is to generate a rigorous checklist based on the provided design document. The checklist must verify that the design thoroughly addresses all project requirements, constraints, and adheres to best-in-class engineering principles.
+    const generateDesignReviewChecklist = async (documentForReview: string) => {
+        if (!apiKey) { throw new Error("API Key is not provided"); }
+        let systemInstruction = `You are a Principal Systems Engineer AI specializing in formal design gate reviews. Your task is to generate a rigorous checklist based on the provided design document. The checklist must verify that the design thoroughly addresses all project requirements, constraints, and adheres to best-in-class engineering principles.
 
 - For a 'Preliminary Design' phase, focus on: concept feasibility, analysis of alternatives (trade studies), risk assessment, and clear alignment with top-level requirements.
 - For a 'Critical Design' phase, focus on: detailed component specifications, manufacturability (DFMA), failure mode analysis (FMEA), verification & validation plan, and compliance with all relevant standards.
 
 Generate 5-7 critical, actionable checklist items that a review board would use to grant a go/no-go decision. Output must be a JSON object with a 'checklist' key containing an array of strings.`;
 
+        if (project.developmentMode === 'rapid') {
+            systemInstruction += "\n\nIMPORTANT: Respond in a brief, accurate, and cryptic manner. Use bullet lists and concise language suitable for rapid prototyping. Avoid verbose explanations.";
+        }
+
         const userPrompt = `## Project: ${project.name}
+
 ### Requirements:
+\`\`\`text
 ${project.requirements}
+\`\`\`
+
 ### Constraints:
+\`\`\`text
 ${project.constraints}
+\`\`\`
 ---
 ## Design Document for Review (Phase: ${phase.name}):
+\`\`\`markdown
 ${documentForReview}
+\`\`\`
 ---
 ## Task:
 Generate the JSON checklist for the ${phase.name} review.`;
 
+        const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
+        // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+        const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: userPrompt,
+            contents: combinedContents,
             config: {
-                systemInstruction,
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
@@ -405,10 +534,11 @@ Generate the JSON checklist for the ${phase.name} review.`;
                             type: Type.ARRAY,
                             items: { type: Type.STRING }
                         }
-                    }
+                    },
+                    required: ["checklist"]
                 }
             }
-        });
+        }));
         const resultJson = JSON.parse(response.text);
         return resultJson.checklist;
     };
@@ -425,8 +555,8 @@ Generate the JSON checklist for the ${phase.name} review.`;
             setIsLoading(true);
             setGenerationError('');
             try {
-                const checklistText = await generateDesignReviewChecklist(finalOutput);
-                const newChecklist = checklistText.map((text, index) => ({
+                const checklistText = await generateDesignReviewChecklist(finalOutput || '');
+                const newChecklist = checklistText.map((text: string, index: number) => ({
                     id: `${phase.id}-review-${index}`,
                     text,
                     checked: false,
@@ -436,14 +566,14 @@ Generate the JSON checklist for the ${phase.name} review.`;
                     status: 'in-review',
                     designReview: { ...phase.designReview, checklist: newChecklist },
                 });
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Failed to generate design review:', error);
                 setGenerationError(error.message || 'An unknown error occurred.');
             } finally {
                 setIsLoading(false);
             }
         } else {
-            const updates: { status: string; output: string; sprints?: any[] } = {
+            const updates: Partial<Phase> = {
                 status: 'completed',
                 output: finalOutput,
             };
@@ -454,7 +584,8 @@ Generate the JSON checklist for the ${phase.name} review.`;
         }
     };
     
-    const handleChecklistChange = (itemId) => {
+    const handleChecklistChange = (itemId: string) => {
+        if (!phase.designReview) return;
         const newChecklist = phase.designReview.checklist.map(item =>
             item.id === itemId ? { ...item, checked: !item.checked } : item
         );
@@ -462,21 +593,22 @@ Generate the JSON checklist for the ${phase.name} review.`;
     };
 
     const handleFinalizeReview = () => {
-        const updates: { status: string; sprints?: any[] } = { status: 'completed' };
+        const updates: Partial<Phase> = { status: 'completed' };
         if (phase.sprints?.length > 0) {
             updates.sprints = phase.sprints.map(s => ({ ...s, status: 'completed' }));
         }
         onUpdatePhase(phase.id, updates);
     };
 
-    const generateSubDocument = async (docId) => {
+    const generateSubDocument = async (docId: string) => {
         setLoadingDocId(docId);
         setGenerationError('');
         const doc = phase.sprints.find(d => d.id === docId);
         if (!doc) return;
 
         try {
-            const prompts = {
+            if (!apiKey) { throw new Error("API Key is not provided"); }
+            const prompts: { [key: string]: { [key: string]: string } } = {
                 'Requirements': {
                     'Project Scope': "Generate a professional Project Scope document. It must include: an introduction/executive summary, clear business and project objectives, a list of key deliverables, project stakeholders, and a specific section for out-of-scope items. The tone should be formal and suitable for project sponsors.",
                     'Statement of Work (SOW)': "Generate a formal Statement of Work (SOW). It must include: the period of performance, a detailed scope of work section, a breakdown of specific tasks, a list of major milestones, all tangible deliverables, and the criteria for acceptance. The language should be precise and contractual.",
@@ -504,37 +636,50 @@ Generate the JSON checklist for the ${phase.name} review.`;
             if (docIndex > 0) {
                 const prevDoc = phase.sprints[docIndex - 1];
                 if (prevDoc.output) {
-                    subPhaseContext = `\n\n---\n\n## Context from Previous Document in this Phase (${prevDoc.name}):\n${prevDoc.output}`;
+                    subPhaseContext = `\n\n---\n\n## Context from Previous Document in this Phase (${prevDoc.name}):\n\`\`\`markdown\n${prevDoc.output}\n\`\`\``;
                 }
             }
             
-            const systemInstruction = `You are an expert AI engineering assistant specializing in project documentation. Your task is to generate a single, comprehensive engineering document based on the specified type. The document must be well-structured in Markdown, tailored to the project's details, and ready for professional use.`;
+            let systemInstruction = `You are an expert AI engineering assistant specializing in project documentation. Your task is to generate a single, comprehensive engineering document based on the specified type. The document must be well-structured in Markdown, tailored to the project's details, and ready for professional use.`;
+            
+            if (project.developmentMode === 'rapid') {
+                systemInstruction += "\n\nIMPORTANT: Respond in a brief, accurate, and cryptic manner. Use bullet lists and concise language suitable for rapid prototyping. Avoid verbose explanations.";
+            }
+
             const userPrompt = `## Project: ${project.name}
 ### Disciplines: ${disciplines.join(', ')}
+
 ### High-Level Requirements:
+\`\`\`text
 ${project.requirements}
+\`\`\`
+
 ### High-Level Constraints:
+\`\`\`text
 ${project.constraints}
+\`\`\`
 ${subPhaseContext}
 ---
 ## Task:
 Generate the **${doc.name}** document based on the prompt below:
 "${specificPrompt}"`;
-
+            
+            const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
             const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
+            // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
+            const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: userPrompt,
-                config: { systemInstruction }
-            });
+                contents: combinedContents,
+            }));
             const text = response.text;
 
-            const updatedSprints = phase.sprints.map(d =>
+            // FIX: Added explicit return type to map to resolve type inference error.
+            const updatedSprints = phase.sprints.map((d): Sprint =>
                 d.id === docId ? { ...d, output: text, status: 'completed' } : d
             );
             onUpdatePhase(phase.id, { sprints: updatedSprints, status: 'in-progress' });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(`Failed to generate ${doc.name}:`, error);
             setGenerationError(error.message || 'An unknown error occurred.');
         } finally {
@@ -610,7 +755,7 @@ Generate the **${doc.name}** document based on the prompt below:
                                                 <>
                                                     <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-72 overflow-y-auto prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(doc.output) }} />
                                                     <div className="flex space-x-2">
-                                                        <Button size="sm" variant="outline" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output); }}>
+                                                        <Button size="sm" variant="outline" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output!); }}>
                                                             <Edit3 className="mr-2 w-4 h-4"/>Edit
                                                         </Button>
                                                         <Button size="sm" variant="outline" onClick={() => generateSubDocument(doc.id)} disabled={loadingDocId === doc.id}>
@@ -732,7 +877,7 @@ Generate the **${doc.name}** document based on the prompt below:
                                                     <div className="flex space-x-2 mt-4">
                                                         <Button size="sm" variant="outline" onClick={() => { 
                                                             setEditingSprintId(sprint.id); 
-                                                            setEditedSprintOutput(sprint.output); 
+                                                            setEditedSprintOutput(sprint.output!); 
                                                             setEditedSprintDeliverablesText((sprint.deliverables || []).join('\n'));
                                                         }}><Edit3 className="mr-2 w-4 h-4"/>Edit</Button>
                                                         <Button size="sm" variant="outline" onClick={() => generateSprintOutput(sprint.id)} disabled={loadingSprint === sprint.id}><RefreshCw className="mr-2 w-4 h-4"/>Regenerate</Button>
@@ -775,6 +920,7 @@ Generate the **${doc.name}** document based on the prompt below:
                 onSave={handleSaveOutput}
                 isLoading={isLoading}
                 isEditable={phase.isEditable}
+                apiKey={apiKey}
             />
 
             <PhaseActions
