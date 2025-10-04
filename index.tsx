@@ -668,10 +668,10 @@ ${fullContext}`;
                   downloadFn = downloadJsonFile;
                   break;
                 case 'pm-data-pack':
-                    systemInstruction = "You are an expert AI project management assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON data pack suitable for import into a project management system.";
-                    userPrompt = `Based on the complete project documentation provided below, generate a single JSON object that serves as a data pack for a project management system.
+                    systemInstruction = "You are an expert AI project management assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON data pack suitable for import into a project management system. The output JSON must have two top-level keys: 'schema' and 'data'. The 'schema' object must describe the fields in the 'data' object.";
+                    userPrompt = `Based on the complete project documentation provided below, generate a single JSON object that serves as a data pack for a project management system. The JSON must contain 'schema' and 'data' top-level keys. The 'schema' should describe the contents of the 'data' object.
 
-The JSON object must contain:
+The 'data' object must contain:
 1.  **projectName**: The name of the project.
 2.  **projectSummary**: A concise, one-paragraph summary of the project's goals, requirements, and constraints.
 3.  **workBreakdownStructure**: A hierarchical breakdown of the project. This should be an array of phase objects. Each phase object must include its name, description, and a nested array of its associated sprints (with sprint name, description, and current status).
@@ -688,52 +688,70 @@ ${fullContext}`;
                         responseSchema: {
                             type: Type.OBJECT,
                             properties: {
-                                projectName: { type: Type.STRING, description: "The official name of the project." },
-                                projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals, requirements, and constraints." },
-                                workBreakdownStructure: {
-                                    type: Type.ARRAY,
-                                    description: "A hierarchical breakdown of project phases and their sprints.",
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            phaseName: { type: Type.STRING },
-                                            phaseDescription: { type: Type.STRING },
-                                            sprints: {
-                                                type: Type.ARRAY,
-                                                items: {
-                                                    type: Type.OBJECT,
-                                                    properties: {
-                                                        sprintName: { type: Type.STRING },
-                                                        sprintDescription: { type: Type.STRING },
-                                                        status: { type: Type.STRING }
-                                                    },
-                                                    required: ["sprintName", "sprintDescription", "status"]
-                                                }
+                                schema: {
+                                    type: Type.OBJECT,
+                                    description: "An object describing the structure of the 'data' field. The keys must match the keys in 'data' and the values must be descriptions of what that data represents.",
+                                    properties: {
+                                        projectName: { type: Type.STRING },
+                                        projectSummary: { type: Type.STRING },
+                                        workBreakdownStructure: { type: Type.STRING },
+                                        documentArtifacts: { type: Type.STRING },
+                                        sprintsList: { type: Type.STRING },
+                                    },
+                                    required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
+                                },
+                                data: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        projectName: { type: Type.STRING, description: "The official name of the project." },
+                                        projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals, requirements, and constraints." },
+                                        workBreakdownStructure: {
+                                            type: Type.ARRAY,
+                                            description: "A hierarchical breakdown of project phases and their sprints.",
+                                            items: {
+                                                type: Type.OBJECT,
+                                                properties: {
+                                                    phaseName: { type: Type.STRING },
+                                                    phaseDescription: { type: Type.STRING },
+                                                    sprints: {
+                                                        type: Type.ARRAY,
+                                                        items: {
+                                                            type: Type.OBJECT,
+                                                            properties: {
+                                                                sprintName: { type: Type.STRING },
+                                                                sprintDescription: { type: Type.STRING },
+                                                                status: { type: Type.STRING }
+                                                            },
+                                                            required: ["sprintName", "sprintDescription", "status"]
+                                                        }
+                                                    }
+                                                },
+                                                required: ["phaseName", "phaseDescription", "sprints"]
                                             }
                                         },
-                                        required: ["phaseName", "phaseDescription", "sprints"]
-                                    }
-                                },
-                                documentArtifacts: {
-                                    type: Type.ARRAY,
-                                    description: "A list of all generated document titles.",
-                                    items: { type: Type.STRING }
-                                },
-                                sprintsList: {
-                                    type: Type.ARRAY,
-                                    description: "A flat list of all sprints for easy import as tasks.",
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            sprintName: { type: Type.STRING },
-                                            phase: { type: Type.STRING },
-                                            description: { type: Type.STRING }
+                                        documentArtifacts: {
+                                            type: Type.ARRAY,
+                                            description: "A list of all generated document titles.",
+                                            items: { type: Type.STRING }
                                         },
-                                        required: ["sprintName", "phase", "description"]
-                                    }
+                                        sprintsList: {
+                                            type: Type.ARRAY,
+                                            description: "A flat list of all sprints for easy import as tasks.",
+                                            items: {
+                                                type: Type.OBJECT,
+                                                properties: {
+                                                    sprintName: { type: Type.STRING },
+                                                    phase: { type: Type.STRING },
+                                                    description: { type: Type.STRING }
+                                                },
+                                                required: ["sprintName", "phase", "description"]
+                                            }
+                                        }
+                                    },
+                                    required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
                                 }
                             },
-                            required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
+                            required: ['schema', 'data']
                         }
                     };
                     fileName = `${project.name}_PM_Data_Pack`;
