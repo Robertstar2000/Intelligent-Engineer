@@ -1,135 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { ChevronRight, Download, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, FileText, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock, KeyRound, Ticket, LoaderCircle, XCircle, Bot, FlaskConical, FileJson } from 'lucide-react';
+// FIX: Added Download icon to lucide-react imports.
+import { ChevronRight, Home, BookOpen, Wrench, Rocket, CheckCircle, Clock, Circle, Plus, Search, Archive, ArrowLeft, Sun, Moon, HelpCircle, Hourglass, Lock, LoaderCircle, XCircle, Download } from 'lucide-react';
 import { PhaseView } from './src/components/PhaseView';
 import { Button, Card, Badge, ProgressBar } from './src/components/ui';
 import { HelpModal } from './src/components/HelpModal';
-// FIX: Import GenerateContentResponse to correctly type API call results.
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { TuningControls } from './src/components/TuningControls';
-
-
-// --- HELPER FUNCTION ---
-// FIX: Added generic types and type for catch block error to resolve TypeScript errors.
-const withRetry = async <T,>(fn: () => Promise<T>, retries = 1): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (retries > 0) {
-      console.warn('API call failed, retrying...', error);
-      await new Promise(res => setTimeout(res, 1000)); // Add a 1s delay for transient issues
-      return withRetry(fn, retries - 1);
-    }
-    throw error;
-  }
-};
-
-const sanitizeFilename = (name: string): string => name.replace(/[\\/?%*:|"<>.\s]/g, '_');
-
-const generateProjectZip = async (
-    project: Project, 
-    apiKey: string | null, 
-    setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void
-): Promise<void> => {
-    if (!apiKey) {
-        setToast({ message: 'API Key is required to generate the summary.', type: 'error' });
-        return;
-    }
-
-    const JSZip = (window as any).JSZip;
-    if (!JSZip) {
-        setToast({ message: 'JSZip library not found.', type: 'error' });
-        console.error("JSZip library not found.");
-        return;
-    }
-    
-    setToast({ message: 'Generating comprehensive project summary with AI...', type: 'success' });
-
-    try {
-        const ai = new GoogleGenAI({ apiKey });
-
-        let fullContext = `# Project: ${project.name}\n\n## Disciplines\n- ${project.disciplines.join('\n- ')}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n---\n\n## Generated Phase Documentation Overview\n`;
-        project.phases.forEach(phase => {
-            if (phase.output || (phase.sprints && phase.sprints.some(s => s.output))) {
-                fullContext += `\n### Phase: ${phase.name} - Status: ${phase.status}\n`;
-                if (phase.output) {
-                    fullContext += `* Main Specification: Generated (${phase.output.length} characters)\n`;
-                }
-                if (phase.sprints && phase.sprints.some(s => s.output)) {
-                    phase.sprints.forEach(sprint => {
-                        if (sprint.output) {
-                            fullContext += `  * Sprint/Document: ${sprint.name} - Generated (${sprint.output.length} characters)\n`;
-                        }
-                    });
-                }
-            }
-        });
-        fullContext = fullContext.trim();
-
-        const systemInstruction = `You are an expert technical writer and project manager AI. Your task is to generate a comprehensive and well-structured project summary in Markdown format. This summary will serve as the main README file in a project archive.`;
-        const userPrompt = `Based on the complete project context provided below, generate a detailed project summary. The summary should include:
-1.  **Executive Summary**: A high-level overview of the project's purpose, goals, and key design choices.
-2.  **Key Features & Functionality**: A bulleted list derived from the project requirements and generated documentation.
-3.  **Project Status**: A brief summary of the project's current progress, highlighting completed phases and what is next.
-4.  **Technical Overview**: A short description of the core technical approach, mentioning the engineering disciplines involved.
-5.  **Generated Artifacts**: A summary of the documents that have been generated across the various phases.
-
-The tone should be professional, clear, and concise.
-
----
-
-## Full Project Context:
-
-${fullContext}`;
-        
-        const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
-        const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: combinedContents,
-        }));
-
-        const summaryContent = response.text;
-        
-        setToast({ message: 'AI summary generated. Assembling project archive...', type: 'success' });
-        const zip = new JSZip();
-        zip.file("00_Project_Summary.md", summaryContent.trim());
-
-        project.phases.forEach((phase, index) => {
-            const phaseNumber = String(index + 1).padStart(2, '0');
-            const phaseFolderName = `${phaseNumber}_${sanitizeFilename(phase.name)}`;
-            const phaseFolder = zip.folder(phaseFolderName);
-            if (!phaseFolder) return;
-
-            if (phase.output) {
-                phaseFolder.file(`_Phase_Specification.md`, phase.output);
-            }
-
-            if (phase.sprints && phase.sprints.length > 0) {
-                phase.sprints.forEach(sprint => {
-                    if (sprint.output) {
-                        phaseFolder.file(`${sanitizeFilename(sprint.name)}.md`, sprint.output);
-                    }
-                });
-            }
-        });
-
-        const content = await zip.generateAsync({ type: "blob" });
-        const url = URL.createObjectURL(content);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${sanitizeFilename(project.name)}_Project_Archive.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        setToast({ message: 'Project archive downloaded!', type: 'success' });
-
-    } catch (error: any) {
-        console.error('Failed to generate zip archive:', error);
-        setToast({ message: `Failed to generate archive: ${error.message}`, type: 'error' });
-    }
-};
+import { ProjectProvider, useProject } from './src/context/ProjectContext';
+import { Project, Phase } from './src/types';
+import { DocumentsPage } from './src/components/DocumentsPage';
 
 // --- THEME MANAGEMENT ---
 const useTheme = (): [string, React.Dispatch<React.SetStateAction<string>>] => {
@@ -150,7 +29,6 @@ const useTheme = (): [string, React.Dispatch<React.SetStateAction<string>>] => {
     return [theme, setThemeState];
 };
 
-// FIX: Added props type for ThemeToggleButton
 interface ThemeToggleButtonProps {
   theme: string;
   setTheme: (theme: string) => void;
@@ -168,48 +46,6 @@ const ThemeToggleButton = ({ theme, setTheme }: ThemeToggleButtonProps) => {
     );
 };
 
-
-// --- TYPES AND INTERFACES ---
-interface Project {
-  id: string;
-  name: string;
-  requirements: string;
-  constraints: string;
-  disciplines: string[];
-  developmentMode: 'full' | 'rapid';
-  currentPhase: number;
-  phases: Phase[];
-  createdAt: Date;
-}
-
-interface Phase {
-  id: string;
-  name: string;
-  description: string;
-  status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
-  sprints: Sprint[];
-  tuningSettings: TuningSettings;
-  output?: string;
-  isEditable: boolean;
-  designReview?: {
-    required: boolean;
-    checklist: { id: string; text: string; checked: boolean }[];
-  };
-}
-
-interface Sprint {
-  id:string;
-  name: string;
-  description: string;
-  status: 'not-started' | 'in-progress' | 'completed';
-  deliverables: string[];
-  output?: string;
-}
-
-interface TuningSettings {
-  [key: string]: number | string | boolean;
-}
-
 // --- CONSTANTS ---
 const ENGINEERING_DISCIPLINES = [
   'Mechanical Engineering', 'Electrical Engineering', 'Chemical Engineering',
@@ -221,13 +57,7 @@ const ENGINEERING_DISCIPLINES = [
   'Electronics Engineering', 'Manufacturing Engineering'
 ];
 
-
-
-
 // --- VIEW COMPONENTS ---
-// FIX: Removed ApiKeyAccess component to comply with Gemini API guidelines. API key should be handled via environment variables.
-
-// FIX: Added props type for LandingPage and removed API key related props.
 interface LandingPageProps {
   onStartProject: () => void;
   theme: string;
@@ -237,7 +67,6 @@ interface LandingPageProps {
 const LandingPage = ({ onStartProject, theme, setTheme, setToast }: LandingPageProps) => {
     const apiAccessRef = useRef<HTMLDivElement>(null);
     
-    // FIX: Simplified handleStartProjectClick as API key validation is removed from UI.
     const handleStartProjectClick = () => {
         if (!process.env.API_KEY) {
             setToast({ message: 'API key is not configured. Please contact the administrator.', type: 'error' });
@@ -366,7 +195,6 @@ const LandingPage = ({ onStartProject, theme, setTheme, setToast }: LandingPageP
   );
 };
 
-// FIX: Added props type for ProjectWizard
 interface ProjectWizardProps {
   onProjectCreated: (project: Project) => void;
   onCancel: () => void;
@@ -376,7 +204,7 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   const [projectData, setProjectData] = useState({ name: '', requirements: '', constraints: '', disciplines: [] as string[] });
   const [searchTerm, setSearchTerm] = useState('');
   const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
-  const [requirementsTuning, setRequirementsTuning] = useState<TuningSettings>({
+  const [requirementsTuning, setRequirementsTuning] = useState({
       clarity: 70,
       technicality: 60,
       foresight: 50,
@@ -501,412 +329,18 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   );
 };
 
-// FIX: Added props type for DocumentsPage
-interface DocumentsPageProps {
-  project: Project | null;
-  onBack: () => void;
-  apiKey: string | null;
-  setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
-}
-const DocumentsPage = ({ project, onBack, apiKey, setToast }: DocumentsPageProps) => {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generationTarget, setGenerationTarget] = useState<string | null>(null);
-  const [isZipping, setIsZipping] = useState(false);
-
-  if (!project) return null;
-
-  const downloadFile = (content: string, fileName: string, type: string) => {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadMarkdownFile = (content: string, fileName: string) => {
-    downloadFile(content, `${sanitizeFilename(fileName)}.md`, 'text/markdown;charset=utf-8');
-  };
-  
-  const downloadJsonFile = (content: string, fileName: string) => {
-    downloadFile(content, `${sanitizeFilename(fileName)}.json`, 'application/json;charset=utf-8');
-  };
-
-  const handleDownloadZip = async () => {
-      if (!project) return;
-      setIsZipping(true);
-      await generateProjectZip(project, apiKey, setToast);
-      setIsZipping(false);
-  };
-  
-  const handleGenerateAndDownload = async (type: 'vibe-coding' | 'simulation' | 'summary' | 'pm-data-pack') => {
-      if (!apiKey) {
-          setToast({ message: 'API Key not found. Cannot generate content.', type: 'error' });
-          return;
-      }
-      setIsGenerating(true);
-      setGenerationTarget(type);
-
-      try {
-          let fullContext = `# Project: ${project.name}\n\n## Disciplines\n- ${project.disciplines.join('\n- ')}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n---\n\n## Generated Phase Documentation\n`;
-          project.phases.forEach(phase => {
-              if (phase.output) {
-                  fullContext += `\n### Phase: ${phase.name}\n\n${phase.output}\n\n---\n`;
-              } else if (phase.sprints && phase.sprints.some(s => s.output)) {
-                  fullContext += `\n### Phase: ${phase.name}\n\n`;
-                  phase.sprints.forEach(sprint => {
-                      if (sprint.output) {
-                          fullContext += `#### Sprint/Document: ${sprint.name}\n\n${sprint.output}\n\n`;
-                      }
-                  });
-                  fullContext += `\n---\n`;
-              }
-          });
-          fullContext = fullContext.trim();
-
-          const ai = new GoogleGenAI({ apiKey });
-          let systemInstruction = '';
-          let userPrompt = '';
-          let genConfig: any = {};
-          let fileName = '';
-          let downloadFn: (content: string, fileName: string) => void = downloadMarkdownFile;
-
-          switch (type) {
-              case 'vibe-coding':
-                  systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate the full source code to implement the design for an engineering project based on its documentation.";
-                  userPrompt = `Based on the complete project documentation provided below, your task is to synthesize all technical information into a single, comprehensive, and expert-level prompt for an AI coding assistant. This final prompt must be a self-contained technical brief that enables the coding AI to generate the full source code for the project without needing to reference the original documents again.
-
-The generated prompt must:
-1.  **Synthesize and Structure**: Do not just copy-paste. Analyze all provided documents (requirements, design specs, trade studies, FMEA, etc.) and distill them into a clear, logical structure.
-2.  **Define the Architecture**: Propose a specific, modern technology stack suitable for the project's disciplines (e.g., for a web service: Python/FastAPI backend, React/TypeScript frontend, PostgreSQL database, Docker for containerization). Justify the choices. Describe a clean, scalable architecture (e.g., layered architecture, microservices).
-3.  **Detail Core Logic and Functionality**: Enumerate every feature, function, and user story. For each, describe the required inputs, processing logic, and expected outputs. Include details on algorithms, state management, and data transformations.
-4.  **Specify Data Models**: Define the complete database schema or data structures, including tables, fields, data types, relationships, and constraints.
-5.  **Outline APIs**: If applicable, define the complete REST or GraphQL API endpoints, including HTTP methods, URL paths, request payloads, and example success/error responses.
-6.  **Detail Non-Functional Requirements**: Explicitly list all performance, security, reliability, and scalability requirements derived from the documentation.
-7.  **Provide a Testing Strategy**: Instruct the coding AI to generate comprehensive unit, integration, and end-to-end tests. Specify key scenarios to cover.
-8.  **Include a Deployment Plan**: Outline the steps for setting up the development environment and deploying the application, including a detailed README.md file structure.
-
-The final output should be a single Markdown document that is the ultimate source of truth for the AI code generator.
-
----
-
-## Full Project Documentation:
-
-${fullContext}`;
-                  fileName = `${project.name}_vibe_coding_prompt`;
-                  downloadFn = downloadMarkdownFile;
-                  break;
-              case 'simulation':
-                  systemInstruction = "You are an AI assistant that generates expert-level prompts for other AI models. Your task is to create a detailed prompt for a 'vibe code ide' to generate a *simulation* of an engineering project based on its documentation.";
-                  userPrompt = `Based on the complete project documentation provided below, your task is to synthesize all technical information into a single, comprehensive, and expert-level prompt for an AI coding assistant to build a functional *simulation* of the designed system. This final prompt must be a self-contained technical brief for building the simulation, not the production system itself.
-
-The generated prompt must instruct the coding AI to:
-1.  **Identify Key Systems & Variables**: Analyze the documentation to identify the critical components, systems, and physical/logical processes to be modeled. List the key state variables, parameters, and inputs that will drive the simulation.
-2.  **Define the Simulation Model**: Propose a suitable simulation paradigm (e.g., discrete-event simulation, agent-based modeling, system dynamics). Specify the core algorithms, mathematical models, and state transition logic that will govern the simulation's behavior based on the design documents.
-3.  **Propose a Technology Stack**: Suggest a technology stack suitable for simulation and visualization (e.g., Python with libraries like SimPy, NumPy, and Matplotlib/Plotly for plotting, or a web-based stack like React/Three.js for 3D visualization).
-4.  **Design the User Interface (UI)**: Describe a simple, interactive UI that allows a user to:
-    *   Set initial conditions and parameters.
-    *   Start, stop, and pause the simulation.
-    *   Visualize the system's state in real-time through charts, graphs, or a simple graphical representation.
-5.  **Specify Data Logging & KPIs**: Define the key performance indicators (KPIs) and data points that must be logged during the simulation run. The goal is to analyze the system's performance, identify bottlenecks, and validate the design against its requirements.
-6.  **Structure the Code**: Outline a clear code structure for the simulation, separating the simulation engine from the UI and data logging components.
-7.  **Focus on Representation, not Production**: Emphasize that the simulation code should be a valid functional representation of the design, but does not need to be production-ready, highly optimized, or scalable.
-
-The final output should be a single Markdown document that provides a complete blueprint for an AI to code the simulation.
-
----
-
-## Full Project Documentation:
-
-${fullContext}`;
-                  fileName = `${project.name}_simulation_prompt`;
-                  downloadFn = downloadMarkdownFile;
-                  break;
-              case 'summary':
-                  systemInstruction = "You are a project management AI assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON format, including a schema description within the JSON itself.";
-                  userPrompt = `Parse the following complete project documentation and generate a single JSON object. This JSON object must strictly adhere to the provided schema, containing two top-level keys: 'schema' and 'data'. The 'schema' object must contain string descriptions for each field that will appear in the 'data' object. The 'data' object must contain the extracted project summary, a complete list of all generated documents, and a complete list of all sprints.\n\n---\n\n## Full Project Documentation:\n\n${fullContext}`;
-                  genConfig = {
-                      responseMimeType: "application/json",
-                      responseSchema: {
-                          type: Type.OBJECT,
-                          properties: {
-                              schema: {
-                                  type: Type.OBJECT,
-                                  description: "An object describing the structure of the 'data' field. The keys must match the keys in 'data' and the values must be descriptions of what that data represents.",
-                                  properties: {
-                                      projectSummary: { type: Type.STRING },
-                                      documents: { type: Type.STRING },
-                                      sprints: { type: Type.STRING }
-                                  },
-                                  required: ["projectSummary", "documents", "sprints"]
-                              },
-                              data: {
-                                  type: Type.OBJECT,
-                                  properties: {
-                                      projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals and design." },
-                                      documents: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all major generated document titles (from phases and sprints)." },
-                                      sprints: {
-                                          type: Type.ARRAY,
-                                          items: {
-                                              type: Type.OBJECT,
-                                              properties: { name: { type: Type.STRING }, description: { type: Type.STRING } },
-                                              required: ["name", "description"]
-                                          },
-                                          description: "A list of all development sprints with their names and descriptions."
-                                      }
-                                  },
-                                  required: ["projectSummary", "documents", "sprints"]
-                              }
-                          },
-                          required: ['schema', 'data']
-                      }
-                  };
-                  fileName = `${project.name}_design_summary_and_sprints_prompt`;
-                  downloadFn = downloadJsonFile;
-                  break;
-                case 'pm-data-pack':
-                    systemInstruction = "You are an expert AI project management assistant. Your task is to parse comprehensive project documentation and extract key information into a structured JSON data pack suitable for import into a project management system. The output JSON must have two top-level keys: 'schema' and 'data'. The 'schema' object must describe the fields in the 'data' object.";
-                    userPrompt = `Based on the complete project documentation provided below, generate a single JSON object that serves as a data pack for a project management system. The JSON must contain 'schema' and 'data' top-level keys. The 'schema' should describe the contents of the 'data' object.
-
-The 'data' object must contain:
-1.  **projectName**: The name of the project.
-2.  **projectSummary**: A concise, one-paragraph summary of the project's goals, requirements, and constraints.
-3.  **workBreakdownStructure**: A hierarchical breakdown of the project. This should be an array of phase objects. Each phase object must include its name, description, and a nested array of its associated sprints (with sprint name, description, and current status).
-4.  **documentArtifacts**: A flat array of strings, listing the titles of all generated documents (both main phase specifications and sprint-specific documents).
-5.  **sprintsList**: A flat array of all sprint objects, where each object includes the sprint name, its parent phase name, and its description. This is for easy import as tasks.
-
----
-
-## Full Project Documentation:
-
-${fullContext}`;
-                    genConfig = {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                schema: {
-                                    type: Type.OBJECT,
-                                    description: "An object describing the structure of the 'data' field. The keys must match the keys in 'data' and the values must be descriptions of what that data represents.",
-                                    properties: {
-                                        projectName: { type: Type.STRING },
-                                        projectSummary: { type: Type.STRING },
-                                        workBreakdownStructure: { type: Type.STRING },
-                                        documentArtifacts: { type: Type.STRING },
-                                        sprintsList: { type: Type.STRING },
-                                    },
-                                    required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
-                                },
-                                data: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        projectName: { type: Type.STRING, description: "The official name of the project." },
-                                        projectSummary: { type: Type.STRING, description: "A concise summary of the project's goals, requirements, and constraints." },
-                                        workBreakdownStructure: {
-                                            type: Type.ARRAY,
-                                            description: "A hierarchical breakdown of project phases and their sprints.",
-                                            items: {
-                                                type: Type.OBJECT,
-                                                properties: {
-                                                    phaseName: { type: Type.STRING },
-                                                    phaseDescription: { type: Type.STRING },
-                                                    sprints: {
-                                                        type: Type.ARRAY,
-                                                        items: {
-                                                            type: Type.OBJECT,
-                                                            properties: {
-                                                                sprintName: { type: Type.STRING },
-                                                                sprintDescription: { type: Type.STRING },
-                                                                status: { type: Type.STRING }
-                                                            },
-                                                            required: ["sprintName", "sprintDescription", "status"]
-                                                        }
-                                                    }
-                                                },
-                                                required: ["phaseName", "phaseDescription", "sprints"]
-                                            }
-                                        },
-                                        documentArtifacts: {
-                                            type: Type.ARRAY,
-                                            description: "A list of all generated document titles.",
-                                            items: { type: Type.STRING }
-                                        },
-                                        sprintsList: {
-                                            type: Type.ARRAY,
-                                            description: "A flat list of all sprints for easy import as tasks.",
-                                            items: {
-                                                type: Type.OBJECT,
-                                                properties: {
-                                                    sprintName: { type: Type.STRING },
-                                                    phase: { type: Type.STRING },
-                                                    description: { type: Type.STRING }
-                                                },
-                                                required: ["sprintName", "phase", "description"]
-                                            }
-                                        }
-                                    },
-                                    required: ["projectName", "projectSummary", "workBreakdownStructure", "documentArtifacts", "sprintsList"]
-                                }
-                            },
-                            required: ['schema', 'data']
-                        }
-                    };
-                    fileName = `${project.name}_PM_Data_Pack`;
-                    downloadFn = downloadJsonFile;
-                    break;
-          }
-          
-          const combinedContents = `${systemInstruction}\n\n${userPrompt}`;
-          // FIX: Add explicit GenerateContentResponse type to resolve type error for response.text
-          const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: combinedContents,
-              config: genConfig
-          }));
-          
-          let contentToDownload = response.text;
-          if (type === 'summary' || type === 'pm-data-pack') {
-              try {
-                  const parsed = JSON.parse(response.text);
-                  contentToDownload = JSON.stringify(parsed, null, 2);
-              } catch (e) {
-                  console.error("Failed to parse and pretty-print JSON:", e);
-              }
-          }
-          
-          downloadFn(contentToDownload, fileName);
-          setToast({ message: `${fileName} generated and downloaded successfully.`, type: 'success' });
-
-      } catch (error: any) {
-          console.error('Failed to generate content:', error);
-          setToast({ message: `Failed to generate: ${error.message}`, type: 'error' });
-      } finally {
-          setIsGenerating(false);
-          setGenerationTarget(null);
-      }
-  };
-
-
-  const hasAnyDocuments = project.phases.some(p => p.output || (p.sprints && p.sprints.some(s => s.output)));
-
-  return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" onClick={onBack} aria-label="Back to Dashboard"><ArrowLeft className="w-4 h-4" /></Button>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Documents</h1>
-        </div>
-      </div>
-
-       <Card>
-           <div>
-                <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex-shrink-0">Project Exports</h3>
-                    <div className="flex-grow border-t border-gray-200 dark:border-gray-700 sm:border-t-0 sm:border-l sm:pl-4">
-                        <div className="flex items-center gap-2 flex-wrap justify-start">
-                            <Button onClick={handleDownloadZip} disabled={!hasAnyDocuments || isGenerating || isZipping}>
-                                {isZipping ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Archive className="mr-2 w-4 h-4" />}
-                                Download All as .zip
-                            </Button>
-                            <Button onClick={() => handleGenerateAndDownload('vibe-coding')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download vibe coding prompt.">
-                                {isGenerating && generationTarget === 'vibe-coding' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Bot className="mr-2 w-4 h-4" />}
-                                Generate Vibe Coding Prompt
-                            </Button>
-                            <Button onClick={() => handleGenerateAndDownload('simulation')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download code simulation prompt.">
-                                {isGenerating && generationTarget === 'simulation' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <FlaskConical className="mr-2 w-4 h-4" />}
-                                Generate Simulation Prompt
-                            </Button>
-                            <Button onClick={() => handleGenerateAndDownload('summary')} disabled={!hasAnyDocuments || isGenerating} title="Generate and then download summary of design, list of documents and list of sprints prompt.">
-                                {isGenerating && generationTarget === 'summary' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <FileJson className="mr-2 w-4 h-4" />}
-                                Generate Design Summary Prompt
-                            </Button>
-                             <Button onClick={() => handleGenerateAndDownload('pm-data-pack')} disabled={!hasAnyDocuments || isGenerating} title="Generate and download a JSON data pack for project management systems.">
-                                {isGenerating && generationTarget === 'pm-data-pack' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Ticket className="mr-2 w-4 h-4" />}
-                                Generate PM Data Pack
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 pl-2">
-                    Use these tools to package your project for hand-off. <strong>Download All</strong> creates a complete project archive. The <strong>Generate</strong> buttons create specialized outputs for AI coding assistants, project management systems, and high-level summaries.
-                </p>
-           </div>
-        </Card>
-
-      {!hasAnyDocuments ? (
-        <Card>
-          <div className="text-center py-12">
-            <FileText className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No Documents Generated</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Start by generating output for a project phase.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {project.phases.map(phase => {
-            const phaseDocs = phase.sprints?.filter(s => s.output) || [];
-            const hasMainDoc = !!phase.output;
-            if (!hasMainDoc && phaseDocs.length === 0) return null;
-
-            return (
-              <Card key={phase.id} title={phase.name} description={phase.description}>
-                <ul role="list" className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {hasMainDoc && (
-                    <li className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3">
-                        <FileText className="w-6 h-6 text-blue-500" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">Main Specification</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{phase.output!.length.toLocaleString()} characters</p>
-                        </div>
-                      </div>
-                      <Button variant={phase.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(phase.output!, `${project!.name}_${phase.name}`)}>
-                        <Download className="mr-2 w-4 h-4" /> Download .md
-                      </Button>
-                    </li>
-                  )}
-                  {phaseDocs.map(sprint => (
-                     <li key={sprint.id} className="flex items-center justify-between py-3">
-                        <div className="flex items-center gap-3">
-                          <FileText className="w-6 h-6 text-indigo-500" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">Sprint: {sprint.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{sprint.output!.length.toLocaleString()} characters</p>
-                          </div>
-                        </div>
-                        <Button variant={sprint.status === 'completed' ? 'primary' : 'outline'} size="sm" onClick={() => downloadMarkdownFile(sprint.output!, `${project!.name}_${phase.name}_${sprint.name}`)}>
-                          <Download className="mr-2 w-4 h-4" /> Download .md
-                        </Button>
-                      </li>
-                  ))}
-                </ul>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// FIX: Added props type for Dashboard
 interface DashboardProps {
-  project: Project;
   onSelectPhase: (index: number) => void;
   onViewDocuments: () => void;
+  onGoHome: () => void;
   theme: string;
   setTheme: (theme: string) => void;
-  apiKey: string | null;
   setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
 }
+const Dashboard = ({ onSelectPhase, onViewDocuments, onGoHome, theme, setTheme, setToast }: DashboardProps) => {
+  const { project } = useProject();
+  if (!project) return null;
 
-const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme, apiKey, setToast }: DashboardProps) => {
-  const [isZipping, setIsZipping] = useState(false);
   const completedPhases = project.phases.filter(p => p.status === 'completed').length;
   const progress = (completedPhases / project.phases.length) * 100;
   const getStatusIcon = (status: Phase['status']) => {
@@ -919,22 +353,15 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme, a
   };
 
   const firstIncompleteIndex = project.phases.findIndex(p => p.status !== 'completed');
-  
-  const handleDownloadZip = async () => {
-    setIsZipping(true);
-    await generateProjectZip(project, apiKey, setToast);
-    setIsZipping(false);
-  };
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-6">
          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
          <div className="flex items-center gap-2">
-            <Button onClick={handleDownloadZip} disabled={isZipping}>
-                {isZipping ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Archive className="mr-2 w-4 h-4" />}
-                Download Project Archive
-            </Button>
+           <Button variant="ghost" onClick={onGoHome}>
+               <Home className="mr-2 w-4 h-4" /> Home
+           </Button>
            <Button variant="ghost" onClick={onViewDocuments}>
                <BookOpen className="mr-2 w-4 h-4" /> View Documents
            </Button>
@@ -985,7 +412,6 @@ const Dashboard = ({ project, onSelectPhase, onViewDocuments, theme, setTheme, a
   );
 };
 
-// FIX: Added props type for Toast
 interface ToastProps {
   message: string;
   type: 'success' | 'error';
@@ -1022,15 +448,14 @@ const Toast = ({ message, type, onDismiss }: ToastProps) => {
 };
 
 // --- MAIN APP ---
-const EngineeringPartnerApp = () => {
+const AppContent = () => {
   const [currentView, setCurrentView] = useState<'landing' | 'wizard' | 'dashboard' | 'phase' | 'documents'>('landing');
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState<number | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [theme, setTheme] = useTheme();
-  
-  // FIX: Removed API key state management from UI to align with guidelines.
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const { project, setProject } = useProject();
 
   useEffect(() => {
     if (toast) {
@@ -1041,10 +466,25 @@ const EngineeringPartnerApp = () => {
     }
   }, [toast]);
   
-  // FIX: Removed handleValidateKey to comply with API key guidelines.
-  
+  useEffect(() => {
+      if (project && currentView === 'landing') {
+          setCurrentView('dashboard');
+      }
+  }, [project, currentView]);
+
+  const handleStartNewProject = () => {
+      if (project) {
+          if (window.confirm('Starting a new project will clear your current saved project. Are you sure you want to continue?')) {
+              setProject(null);
+              setCurrentView('wizard');
+          }
+      } else {
+          setCurrentView('wizard');
+      }
+  };
+
   const handleProjectCreated = (project: Project) => {
-    setCurrentProject(project);
+    setProject(project);
     setCurrentView('dashboard');
   };
 
@@ -1052,53 +492,53 @@ const EngineeringPartnerApp = () => {
     setSelectedPhaseIndex(index);
     setCurrentView('phase');
   };
+  
+  const handleUpdateAndClosePhase = () => {
+      // A small delay to let the user see the status change before navigating
+      setTimeout(() => setCurrentView('dashboard'), 100);
+  };
 
+  // FIX: Added handler to update a phase in the project state, to be passed to PhaseView.
   const handleUpdatePhase = (phaseId: string, updates: Partial<Phase>) => {
-    setCurrentProject(prevProject => {
+    setProject((prevProject) => {
       if (!prevProject) return null;
-      const newPhases = prevProject.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
-      
-      const isCompleting = updates.status && (updates.status === 'completed' || updates.status === 'in-review');
-      if (isCompleting) {
-        setTimeout(() => {
-          // Check if the current view is still the phase view before navigating away
-          if (selectedPhaseIndex !== null && prevProject.phases[selectedPhaseIndex].id === phaseId) {
-            setCurrentView('dashboard');
-          }
-        }, 100); // A small delay to let the user see the status change
-      }
-
+      const newPhases = prevProject.phases.map((p) =>
+        p.id === phaseId ? { ...p, ...updates } : p
+      );
       return { ...prevProject, phases: newPhases };
     });
   };
 
+
   const renderContent = () => {
     switch (currentView) {
       case 'landing':
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
+        return <LandingPage onStartProject={handleStartNewProject} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
       case 'wizard':
-        return <ProjectWizard onProjectCreated={handleProjectCreated} onCancel={() => setCurrentView('landing')} />;
+        return <ProjectWizard onProjectCreated={handleProjectCreated} onCancel={() => setCurrentView(project ? 'dashboard' : 'landing')} />;
       case 'dashboard':
-        return currentProject && <Dashboard project={currentProject} onSelectPhase={handleSelectPhase} onViewDocuments={() => setCurrentView('documents')} theme={theme as string} setTheme={setTheme} apiKey={process.env.API_KEY || null} setToast={setToast} />;
+        return project && <Dashboard onSelectPhase={handleSelectPhase} onViewDocuments={() => setCurrentView('documents')} onGoHome={() => setCurrentView('landing')} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
       case 'phase':
-        return currentProject && selectedPhaseIndex !== null && (
+        return project && selectedPhaseIndex !== null && (
           <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
             <Button variant="outline" onClick={() => setCurrentView('dashboard')} className="mb-6">
               <Home className="mr-2 w-4 h-4" />Back to Dashboard
             </Button>
+            {/* FIX: Passed all required props to PhaseView to resolve component errors. */}
             <PhaseView
-              project={currentProject}
-              phase={currentProject.phases[selectedPhaseIndex]}
-              onUpdatePhase={handleUpdatePhase}
-              disciplines={currentProject.disciplines}
+              phase={project.phases[selectedPhaseIndex]}
+              project={project}
+              disciplines={project.disciplines}
               apiKey={process.env.API_KEY || null}
+              onUpdatePhase={handleUpdatePhase}
+              onPhaseComplete={handleUpdateAndClosePhase}
             />
           </div>
         );
       case 'documents':
-        return currentProject && <DocumentsPage project={currentProject} onBack={() => setCurrentView('dashboard')} apiKey={process.env.API_KEY || null} setToast={setToast} />;
+        return project && <DocumentsPage onBack={() => setCurrentView('dashboard')} setToast={setToast} />;
       default:
-        return <LandingPage onStartProject={() => setCurrentView('wizard')} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
+        return <LandingPage onStartProject={handleStartNewProject} theme={theme as string} setTheme={setTheme} setToast={setToast} />;
     }
   };
 
@@ -1117,6 +557,16 @@ const EngineeringPartnerApp = () => {
     </div>
   );
 };
+
+
+const EngineeringPartnerApp = () => {
+    return (
+        <ProjectProvider>
+            <AppContent />
+        </ProjectProvider>
+    );
+};
+
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(<React.StrictMode><EngineeringPartnerApp /></React.StrictMode>);

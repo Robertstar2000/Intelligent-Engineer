@@ -2,35 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Sliders, Edit3, Save } from 'lucide-react';
 import { Button, Card } from './ui';
 import { Remarkable } from 'remarkable';
+import { Phase } from '../types';
 
 declare const Prism: any;
-
-// FIX: Added type definitions, as they can't be imported from index.tsx without creating circular dependencies or new files.
-interface Sprint {
-  id:string;
-  name: string;
-  description: string;
-  status: 'not-started' | 'in-progress' | 'completed';
-  deliverables: string[];
-  output?: string;
-}
-interface TuningSettings {
-  [key: string]: number | string | boolean;
-}
-interface Phase {
-  id: string;
-  name: string;
-  description: string;
-  status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
-  sprints: Sprint[];
-  tuningSettings: TuningSettings;
-  output?: string;
-  isEditable: boolean;
-  designReview?: {
-    required: boolean;
-    checklist: { id: string; text: string; checked: boolean }[];
-  };
-}
 
 const md = new Remarkable({
     html: true,

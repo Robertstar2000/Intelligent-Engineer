@@ -73,36 +73,11 @@ This tool has several professional engineering processes built directly into the
 -   **Use the Edit Function**: The AI provides a strong first draft. Use the edit feature to refine the details, add specific proprietary information, and ensure it meets your organization's standards.
 -   **Context is Key**: Remember that each new phase generation uses the *most recently completed* phase as context. Ensure a phase is truly complete and accurate before marking it as such.
 
-## 5. API Key Management
+## 5. API Key Configuration
 
-This application is designed to run entirely in your browser, meaning it does not have a traditional backend server to store user data or API keys. To function, it requires a valid Google Gemini API key to make calls to the AI model. The application provides a flexible and secure user interface to manage this, offering two distinct methods for API access.
+This application is powered by the Google Gemini API and requires a valid API key to function. The application is designed to be pre-configured with a secure API key provided via an environment variable. You do not need to enter an API key yourself.
 
-### The API Key Access UI
-
-On the landing page, there is a dedicated section titled **"API Key Access."** This UI component is the central hub for authentication and is designed with clarity and choice in mind. It features a tabbed interface, allowing the user to select one of two methods:
-
--   **Use Promo Code**: This option is for users who may not have their own API key or for demonstration purposes.
--   **Use Your Own API Key**: This option is for users who have their own Google API key and wish to use it.
-
-### Authentication Methods Explained
-
-#### Method A: Promo Code
-
--   **How it works**: The user selects the "Use Promo Code" tab, which presents a single password input field. If they enter the correct, hard-coded promo code (\`rm2214ri\`), the application initializes the Gemini API client using a built-in API key that is part of the project's environment.
--   **User Experience**: This is the simplest path. The user enters the code, clicks "Validate," and upon success, receives a confirmation toast message. The application is then fully unlocked. If the code is incorrect, an error message is shown.
-
-#### Method B: User-Provided API Key
-
--   **How it works**: When a user selects the "Use Your Own API Key" tab, they are presented with a password input field (to obscure the key visually), an explanation, and a direct link to the Google AI Studio where they can generate their own free key.
--   **Validation Process**: This is a key part of the user experience. When a user enters their key and clicks "Validate & Use Key," the application performs a crucial step: it sends a minimal, low-cost test request to the Gemini API using that key.
-    -   **If the test succeeds**: It confirms the key is valid and functional. A success message is displayed, and the application is unlocked. The provided key is then stored in memory for the current session and used for all subsequent AI-powered actions.
-    -   **If the test fails**: The API call will return an error (e.g., authentication failure). The application catches this error and displays an informative message to the user, telling them the key is invalid.
--   **User Experience**: This immediate validation prevents user frustration. Instead of discovering their key is wrong halfway through a research step, they get instant feedback, ensuring they only proceed once the connection to the Gemini service is confirmed.
-
-### Security and State Management
-
--   **Security**: The user-provided API key is handled securely. It is only held in the application's JavaScript memory for the duration of the browser session. It is not stored in \`localStorage\`, cookies, or the IndexedDB database, ensuring it does not persist on the user's machine after they close the tab.
--   **UI Gating**: The application's state (\`isKeyValidated\`) tracks whether a valid key has been provided. Core functions like starting a new experiment or navigating to the dashboard are disabled until this state is true. If a user attempts an action without a validated key, a warning message is shown, and the page automatically scrolls them to the "API Key Access" section, guiding them to complete the required step.
+If AI features appear disabled or return errors, it indicates that the API key has not been configured correctly in the application's deployment environment. Please contact the application administrator for assistance.
 
 ## 6. Project Exports & Handoff
 
