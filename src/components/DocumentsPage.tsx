@@ -84,11 +84,13 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         }
         setIsLoading(type);
         try {
-            let systemInstruction = '';
+            const systemInstruction = "You are an expert AI prompt engineer.";
+            let taskDescription = '';
+    
             if (type === 'code') {
-                systemInstruction = "You are an expert AI prompt engineer. Your task is to synthesize the provided engineering project documentation into a single, comprehensive 'vibe coding prompt'. This prompt should be given to an AI coding assistant to generate the full, production-ready source code. The prompt must be self-contained and instruct the assistant on architecture, core logic, data models, APIs, testing, and deployment strategies based on the design.";
-            } else {
-                systemInstruction = "You are an expert AI prompt engineer. Your task is to synthesize the provided engineering project documentation into a 'vibe simulation prompt'. This prompt should be given to an AI coding assistant to create a functional simulation of the designed system. The prompt must instruct the assistant on modeling system behavior, identifying key variables, designing a simple control UI, and specifying data logging for performance analysis.";
+                taskDescription = "Your task is to synthesize the provided engineering project documentation into a single, comprehensive 'vibe coding prompt'. This prompt should be given to an AI coding assistant to generate the full, production-ready source code. The prompt must be self-contained and instruct the assistant on architecture, core logic, data models, APIs, testing, and deployment strategies based on the design.";
+            } else { // simulation
+                taskDescription = "Your task is to synthesize the provided engineering project documentation into a 'vibe simulation prompt'. This prompt should be given to an AI coding assistant to create a functional simulation of the designed system. The prompt must instruct the assistant on modeling system behavior, identifying key variables, designing a simple control UI, and specifying data logging for performance analysis.";
             }
             
             let fullContext = `# Project: ${project.name}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n---\n\n`;
@@ -98,10 +100,15 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 }
             });
 
+            const userPrompt = `${taskDescription}\n\n## Project Documentation Context:\n\n${fullContext}`;
+
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: `${systemInstruction}\n\n## Project Documentation Context:\n\n${fullContext}`,
+                contents: userPrompt,
+                config: {
+                    systemInstruction,
+                }
             });
 
             const promptText = response.text;

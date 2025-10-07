@@ -140,7 +140,8 @@ const LandingPage = ({ onStartProject, theme, setTheme, setToast }: LandingPageP
           <div className="text-center">
             <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">Intelligent <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Engineering</span></h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">Bridge the gap from concept to reality. This AI-powered companion guides you through the complete engineering lifecycle—from initial requirements to final launch—using a structured, Human-Mediated Agentic Process (HMAP) to ensure quality, rigor, and innovation at every step.</p>
-            <Button size="lg" onClick={handleStartProjectClick} className="text-lg px-8 py-4"><>Start New Project <ChevronRight className="ml-2 w-5 h-5" /></></Button>
+            {/* FIX: Removed unnecessary React Fragment wrapping the Button's children to resolve a potential, albeit subtle, type inference issue. */}
+            <Button size="lg" onClick={handleStartProjectClick} className="text-lg px-8 py-4">Start New Project <ChevronRight className="ml-2 w-5 h-5" /></Button>
             <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">This application created by {styledMifeco} a Mars Technology Institute (MTI) affiliate.</p>
           </div>
         </div>

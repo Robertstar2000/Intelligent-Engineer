@@ -657,6 +657,19 @@ Generate the detailed technical specification and a list of key deliverables in 
         setEditedSprintDeliverablesText('');
     };
 
+    const downloadPhaseOutput = () => {
+        const content = phase.output || '';
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${project.name.replace(/\s+/g, '_')}_${phase.name.replace(/\s+/g, '_')}.md`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     const allSprintsDone = phase.sprints?.length > 0 && phase.sprints.every(s => s.status === 'completed');
 
     return (
@@ -768,7 +781,7 @@ Generate the detailed technical specification and a list of key deliverables in 
             <PhaseActions
                 phase={phase}
                 onMarkComplete={() => { onUpdatePhase(phase.id, { status: 'in-review' }); onPhaseComplete(); }}
-                onDownload={() => {}}
+                onDownload={downloadPhaseOutput}
                 isCompletable={allSprintsDone}
                 reviewRequired={phase.designReview?.required}
                 isDownloadDisabled={!phase.output}
