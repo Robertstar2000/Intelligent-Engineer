@@ -16,7 +16,7 @@
     "@aws-sdk/client-ses": "^3.490.0",
     "@aws-sdk/client-bedrock-runtime": "^3.490.0",
     "@aws-sdk/lib-dynamodb": "^3.490.0",
-    "@google/generative-ai": "^1.19.0",
+    "@google/generative-ai": "^0.21.0",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
     "zod": "^3.22.4",
