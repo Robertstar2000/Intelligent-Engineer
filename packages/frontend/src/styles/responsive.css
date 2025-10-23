@@ -1,0 +1,176 @@
+/* Enhanced Responsive Design System with Collaborative Features */
+
+/* Base responsive breakpoints */
+@media (max-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .responsive-flex {
+    flex-direction: column;
+  }
+  
+  /* Collaboration indicators on mobile */
+  .collaboration-indicators {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 40;
+  }
+  
+  .collaboration-avatars {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 768px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .collaboration-sidebar {
+    width: 250px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .collaboration-sidebar {
+    width: 300px;
+  }
+}
+
+@media (min-width: 1025px) {
+  .responsive-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .collaboration-sidebar {
+    width: 350px;
+  }
+}
+
+/* Enhanced collaborative features */
+.real-time-indicator {
+  position: relative;
+}
+
+.real-time-indicator::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.collaboration-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(59, 130, 246, 0.1);
+  border: 2px solid #3b82f6;
+  border-radius: 0.5rem;
+  pointer-events: none;
+  animation: collaborationPulse 1.5s ease-in-out infinite;
+}
+
+.user-selection {
+  background: rgba(59, 130, 246, 0.2);
+  border-left: 3px solid #3b82f6;
+  animation: selectionFade 0.3s ease-in-out;
+}
+
+.cursor-trail {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #3b82f6;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: cursorTrail 0.5s ease-out forwards;
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes collaborationPulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes selectionFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cursorTrail {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+/* Dark mode enhancements */
+.dark .collaboration-overlay {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #60a5fa;
+}
+
+.dark .user-selection {
+  background: rgba(59, 130, 246, 0.25);
+  border-left-color: #60a5fa;
+}
+
+.dark .cursor-trail {
+  background: #60a5fa;
+}
+
+/* Accessibility enhancements */
+@media (prefers-reduced-motion: reduce) {
+  .real-time-indicator::after,
+  .collaboration-overlay,
+  .cursor-trail {
+    animation: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .collaboration-overlay {
+    border-width: 3px;
+    background: rgba(0, 0, 0, 0.1);
+  }
+  
+  .dark .collaboration-overlay {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}

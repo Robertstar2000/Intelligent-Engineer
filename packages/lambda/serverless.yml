@@ -1,0 +1,335 @@
+service: intelligent-engineering-platform
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  
+  environment:
+    STAGE: ${self:provider.stage}
+    DYNAMODB_TABLE_PREFIX: ${self:service}-${self:provider.stage}
+    JWT_SECRET: ${env:JWT_SECRET}
+    BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY}
+    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL}
+    FRONTEND_URL: ${env:FRONTEND_URL}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE_PREFIX}-*
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+            - bedrock:InvokeModelWithResponseStream
+          Resource:
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/${self:provider.environment.BEDROCK_MODEL_ID}
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: '*'
+
+  tracing:
+    lambda: true
+    apiGateway: true
+
+functions:
+  # Authentication Functions
+  auth-login:
+    handler: src/handlers/auth.login
+    events:
+      - http:
+          path: /auth/login
+          method: post
+          cors: true
+
+  auth-register:
+    handler: src/handlers/auth.register
+    events:
+      - http:
+          path: /auth/register
+          method: post
+          cors: true
+
+  auth-me:
+    handler: src/handlers/auth.me
+    events:
+      - http:
+          path: /auth/me
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Project Functions
+  projects-create:
+    handler: src/handlers/projects.create
+    events:
+      - http:
+          path: /projects
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  projects-list:
+    handler: src/handlers/projects.list
+    events:
+      - http:
+          path: /projects
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  projects-get:
+    handler: src/handlers/projects.get
+    events:
+      - http:
+          path: /projects/{id}
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  projects-update:
+    handler: src/handlers/projects.update
+    events:
+      - http:
+          path: /projects/{id}
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  projects-delete:
+    handler: src/handlers/projects.delete
+    events:
+      - http:
+          path: /projects/{id}
+          method: delete
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # AI Generation Functions
+  ai-generate-phase:
+    handler: src/handlers/ai.generatePhase
+    timeout: 60
+    memorySize: 1024
+    events:
+      - http:
+          path: /projects/{projectId}/phases/{phaseId}/generate
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  ai-generate-sprint:
+    handler: src/handlers/ai.generateSprint
+    timeout: 60
+    memorySize: 1024
+    events:
+      - http:
+          path: /projects/{projectId}/phases/{phaseId}/sprints/{sprintId}/generate
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Template Functions
+  templates-list:
+    handler: src/handlers/templates.list
+    events:
+      - http:
+          path: /templates
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  templates-generate:
+    handler: src/handlers/templates.generate
+    timeout: 60
+    events:
+      - http:
+          path: /templates/generate
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Analytics Functions
+  analytics-project:
+    handler: src/handlers/analytics.getProjectAnalytics
+    events:
+      - http:
+          path: /projects/{projectId}/analytics
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Risk Assessment Functions
+  risk-assess:
+    handler: src/handlers/risk.assess
+    timeout: 60
+    events:
+      - http:
+          path: /projects/{projectId}/risks/assess
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Export Functions
+  export-project:
+    handler: src/handlers/export.exportProject
+    timeout: 120
+    memorySize: 2048
+    events:
+      - http:
+          path: /projects/{projectId}/export
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Authorizer Function
+  authorizer:
+    handler: src/handlers/authorizer.handler
+
+resources:
+  Resources:
+    # DynamoDB Tables
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_PREFIX}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    ProjectsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_PREFIX}-projects
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    TemplatesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_PREFIX}-templates
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    AIResponseCacheTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_PREFIX}-ai-cache
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: cacheKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: cacheKey
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+
+custom:
+  serverless-offline:
+    httpPort: 3001
