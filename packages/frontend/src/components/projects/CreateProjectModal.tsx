@@ -5,13 +5,24 @@ import { X } from 'lucide-react';
 
 interface CreateProjectModalProps {
   onClose: () => void;
-  onCreateProject: (projectData: { name: string; description: string }) => Promise<void>;
+  onCreateProject: (projectData: {
+    name: string;
+    description: string;
+    requirements: string;
+    constraints: string;
+    disciplines: string[];
+    developmentMode: 'full' | 'rapid';
+  }) => Promise<void>;
 }
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCreateProject }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    requirements: '',
+    constraints: '',
+    disciplines: ['Software Engineering'],
+    developmentMode: 'rapid' as 'full' | 'rapid',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +43,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose,
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <Card className="max-w-md w-full">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -75,9 +86,51 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose,
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
-              rows={4}
+              rows={2}
               placeholder="Enter project description"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Requirements
+            </label>
+            <textarea
+              value={formData.requirements}
+              onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+              rows={2}
+              required
+              placeholder="Enter project requirements"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Constraints
+            </label>
+            <textarea
+              value={formData.constraints}
+              onChange={(e) => setFormData({ ...formData, constraints: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+              rows={2}
+              required
+              placeholder="Enter project constraints"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Development Mode
+            </label>
+            <select
+              value={formData.developmentMode}
+              onChange={(e) => setFormData({ ...formData, developmentMode: e.target.value as 'full' | 'rapid' })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="rapid">Rapid Development</option>
+              <option value="full">Full Development</option>
+            </select>
           </div>
 
           <div className="flex space-x-3">

@@ -21,10 +21,12 @@ export const create = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
     }
 
     const body = JSON.parse(event.body || '{}');
+    console.log('Create project request body:', JSON.stringify(body));
     
     // Validate input
     const validation = createProjectSchema.safeParse(body);
     if (!validation.success) {
+      console.log('Validation errors:', JSON.stringify(validation.error.errors));
       return validationErrorResponse(validation.error.errors);
     }
 

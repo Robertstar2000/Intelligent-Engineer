@@ -54,8 +54,10 @@ Write-Host "Bucket policy configured" -ForegroundColor Green
 
 # Upload files to S3
 Write-Host "`nUploading files to S3..." -ForegroundColor Yellow
-aws s3 sync dist/ s3://$BucketName --delete --cache-control "max-age=31536000,public" --exclude "index.html"
-aws s3 cp dist/index.html s3://$BucketName/index.html --cache-control "max-age=0,no-cache,no-store,must-revalidate"
+# Upload JS/CSS with long cache but unique filenames (Vite handles this)
+aws s3 sync dist/ s3://$BucketName --delete --cache-control "max-age=31536000,public,immutable" --exclude "index.html"
+# Upload index.html with no cache to always get latest version
+aws s3 cp dist/index.html s3://$BucketName/index.html --cache-control "max-age=0,no-cache,no-store,must-revalidate" --metadata-directive REPLACE
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Upload failed" -ForegroundColor Red

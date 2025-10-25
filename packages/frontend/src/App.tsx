@@ -143,7 +143,14 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleCreateProject = async (projectData: { name: string; description: string }) => {
+  const handleCreateProject = async (projectData: {
+    name: string;
+    description: string;
+    requirements: string;
+    constraints: string;
+    disciplines: string[];
+    developmentMode: 'full' | 'rapid';
+  }) => {
     try {
       const newProject = await projectsApi.create(projectData);
       setProjects([...projects, newProject]);
