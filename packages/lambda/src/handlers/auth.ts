@@ -31,19 +31,26 @@ export const login = async (event: APIGatewayProxyEvent): Promise<APIGatewayProx
 
     const { email, password } = validation.data;
 
+    console.log('Login attempt for email:', email);
+
     // Find user by email
     const users = await db.query('users', 'EmailIndex', 'email = :email', {
       ':email': email,
     });
 
+    console.log('Users found:', users?.length || 0);
+
     if (!users || users.length === 0) {
+      console.log('No user found with email:', email);
       return errorResponse('Invalid credentials', 401);
     }
 
     const user = users[0];
 
     // Verify password
+    console.log('Verifying password for user:', user.email);
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('Password valid:', isValidPassword);
     if (!isValidPassword) {
       return errorResponse('Invalid credentials', 401);
     }

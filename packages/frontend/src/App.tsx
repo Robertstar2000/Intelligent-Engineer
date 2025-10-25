@@ -6,6 +6,7 @@ import { Button } from './components/ui/Button';
 import { Badge } from './components/ui/Badge';
 import { ProgressBar } from './components/ui/ProgressBar';
 import { Login } from './components/auth/Login';
+import { CreateProjectModal } from './components/projects/CreateProjectModal';
 import { authApi, projectsApi } from './utils/api';
 import { 
   Users, 
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Initialize app
   useEffect(() => {
@@ -141,6 +143,21 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCreateProject = async (projectData: { name: string; description: string }) => {
+    try {
+      const newProject = await projectsApi.create(projectData);
+      setProjects([...projects, newProject]);
+      setCurrentProject(newProject);
+      if (newProject.phases && newProject.phases.length > 0) {
+        setCurrentPhase(newProject.phases[0]);
+      }
+      showToast('Project created successfully!', 'success');
+    } catch (error: any) {
+      console.error('Error creating project:', error);
+      throw error;
+    }
+  };
+
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000);
@@ -216,6 +233,17 @@ export const App: React.FC = () => {
               
               <Button variant="outline" size="sm">
                 <Settings className="w-4 h-4" />
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  window.location.reload();
+                }}
+              >
+                Logout
               </Button>
             </div>
           </div>
@@ -335,7 +363,12 @@ export const App: React.FC = () => {
                 </h3>
                 
                 <div className="space-y-2">
-                  <Button variant="outline" size="sm" className="w-full justify-start">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full justify-start"
+                    onClick={() => setShowCreateModal(true)}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     New Project
                   </Button>
@@ -376,7 +409,10 @@ export const App: React.FC = () => {
                   <p className="text-gray-600 dark:text-gray-400 mb-6">
                     Create a new project or select an existing one to get started with collaborative engineering.
                   </p>
-                  <Button variant="primary">
+                  <Button 
+                    variant="primary"
+                    onClick={() => setShowCreateModal(true)}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     Create New Project
                   </Button>
@@ -405,6 +441,14 @@ export const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <CreateProjectModal
+          onClose={() => setShowCreateModal(false)}
+          onCreateProject={handleCreateProject}
+        />
       )}
     </div>
   );

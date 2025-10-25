@@ -30,8 +30,50 @@ export const api = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Request failed' }));
-      throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
+      // Get error message from response
+      const error = await response.json().catch(() => ({ message: null }));
+      
+      // Provide user-friendly error messages based on status code
+      let errorMessage = error.message;
+      
+      if (!errorMessage) {
+        switch (response.status) {
+          case 400:
+            errorMessage = 'Invalid request. Please check your input and try again.';
+            break;
+          case 401:
+            errorMessage = 'Your session has expired. Please log in again.';
+            break;
+          case 403:
+            errorMessage = 'You do not have permission to perform this action.';
+            break;
+          case 404:
+            errorMessage = 'The requested resource was not found.';
+            break;
+          case 409:
+            errorMessage = 'This email address is already registered. Please log in or use a different email.';
+            break;
+          case 422:
+            errorMessage = 'The information provided is invalid. Please check and try again.';
+            break;
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'A server error occurred. Please try again later.';
+            break;
+          case 502:
+            errorMessage = 'Service temporarily unavailable. Please try again in a moment.';
+            break;
+          case 503:
+            errorMessage = 'Service is currently under maintenance. Please try again later.';
+            break;
+          default:
+            errorMessage = 'An unexpected error occurred. Please try again.';
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return response.json();

@@ -31,12 +31,20 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         response = await authApi.register(formData.name, formData.email, formData.password);
       }
 
+      console.log('Auth response:', response);
+
       // Store token
-      localStorage.setItem('token', response.token);
-      
-      // Call success callback
-      onLoginSuccess();
+      if (response && response.token) {
+        localStorage.setItem('token', response.token);
+        console.log('Token stored successfully');
+        
+        // Call success callback
+        onLoginSuccess();
+      } else {
+        throw new Error('No token received from server');
+      }
     } catch (err: any) {
+      console.error('Authentication error:', err);
       setError(err.message || 'Authentication failed');
     } finally {
       setLoading(false);
