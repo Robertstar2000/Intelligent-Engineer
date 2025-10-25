@@ -5,6 +5,8 @@ import { Card } from './components/ui/Card';
 import { Button } from './components/ui/Button';
 import { Badge } from './components/ui/Badge';
 import { ProgressBar } from './components/ui/ProgressBar';
+import { Login } from './components/auth/Login';
+import { authApi, projectsApi } from './utils/api';
 import { 
   Users, 
   Settings, 
@@ -36,30 +38,29 @@ export const App: React.FC = () => {
       // Check authentication
       const token = localStorage.getItem('token');
       if (!token) {
-        // Redirect to login or show login form
+        // No token, user needs to login
         console.log('No authentication token found');
         setLoading(false);
         return;
       }
 
-      // Get current user info
-      const userResponse = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (userResponse.ok) {
-        const user = await userResponse.json();
+      // Get current user info using API utility
+      try {
+        const user = await authApi.me();
         setCurrentUserId(user.id);
+
+        // Load projects
+        await loadProjects();
+
+        // Get API key from localStorage or environment
+        const storedApiKey = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY;
+        setApiKey(storedApiKey);
+      } catch (error: any) {
+        // Token is invalid or expired, clear it
+        console.error('Authentication failed:', error);
+        localStorage.removeItem('token');
+        setCurrentUserId('');
       }
-
-      // Load projects
-      await loadProjects();
-
-      // Get API key from localStorage or environment
-      const storedApiKey = localStorage.getItem('gemini_api_key') || process.env.REACT_APP_GEMINI_API_KEY;
-      setApiKey(storedApiKey);
 
     } catch (error) {
       console.error('Error initializing app:', error);
@@ -71,21 +72,13 @@ export const App: React.FC = () => {
 
   const loadProjects = async () => {
     try {
-      const response = await fetch('/api/projects', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      const projectsData = await projectsApi.list();
+      setProjects(projectsData);
 
-      if (response.ok) {
-        const projectsData = await response.json();
-        setProjects(projectsData);
-
-        // Auto-select first project if available
-        if (projectsData.length > 0 && !currentProject) {
-          setCurrentProject(projectsData[0]);
-          setCurrentPhase(projectsData[0].phases[projectsData[0].currentPhase] || projectsData[0].phases[0]);
-        }
+      // Auto-select first project if available
+      if (projectsData.length > 0 && !currentProject) {
+        setCurrentProject(projectsData[0]);
+        setCurrentPhase(projectsData[0].phases[projectsData[0].currentPhase] || projectsData[0].phases[0]);
       }
     } catch (error) {
       console.error('Error loading projects:', error);
@@ -97,41 +90,28 @@ export const App: React.FC = () => {
     if (!currentProject) return;
 
     try {
-      const response = await fetch(`/api/projects/${currentProject.id}/phases/${phaseId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(updates),
-      });
+      const updatedPhase = await projectsApi.updatePhase(currentProject.id, phaseId, updates);
+      
+      // Update local state
+      const updatedProject = {
+        ...currentProject,
+        phases: currentProject.phases.map(phase =>
+          phase.id === phaseId ? { ...phase, ...updatedPhase } : phase
+        ),
+      };
 
-      if (response.ok) {
-        const updatedPhase = await response.json();
-        
-        // Update local state
-        const updatedProject = {
-          ...currentProject,
-          phases: currentProject.phases.map(phase =>
-            phase.id === phaseId ? { ...phase, ...updatedPhase } : phase
-          ),
-        };
-
-        setCurrentProject(updatedProject);
-        
-        if (currentPhase?.id === phaseId) {
-          setCurrentPhase({ ...currentPhase, ...updatedPhase });
-        }
-
-        // Update projects list
-        setProjects(prev => prev.map(p => 
-          p.id === currentProject.id ? updatedProject : p
-        ));
-
-        showToast('Phase updated successfully', 'success');
-      } else {
-        throw new Error('Failed to update phase');
+      setCurrentProject(updatedProject);
+      
+      if (currentPhase?.id === phaseId) {
+        setCurrentPhase({ ...currentPhase, ...updatedPhase });
       }
+
+      // Update projects list
+      setProjects(prev => prev.map(p => 
+        p.id === currentProject.id ? updatedProject : p
+      ));
+
+      showToast('Phase updated successfully', 'success');
     } catch (error) {
       console.error('Error updating phase:', error);
       showToast('Failed to update phase', 'error');
@@ -151,14 +131,7 @@ export const App: React.FC = () => {
         setCurrentPhase(nextPhase);
         
         // Update project current phase
-        await fetch(`/api/projects/${currentProject.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify({ currentPhase: currentPhaseIndex + 1 }),
-        });
+        await projectsApi.update(currentProject.id, { currentPhase: currentPhaseIndex + 1 });
       }
 
       showToast('Phase completed successfully!', 'success');
@@ -201,24 +174,7 @@ export const App: React.FC = () => {
   }
 
   if (!currentUserId) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Card className="max-w-md w-full">
-          <div className="text-center py-8">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Authentication Required
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Please log in to access the Intelligent Engineering Platform.
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
+    return <Login onLoginSuccess={initializeApp} />;
   }
 
   return (

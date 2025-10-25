@@ -90,3 +90,6 @@ export const healthCheck = async (): Promise<boolean> => {
     return false;
   }
 };
+
+// Export db as an alias for getPool for backward compatibility
+export const db = getPool();

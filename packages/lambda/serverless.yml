@@ -1,6 +1,6 @@
 service: intelligent-engineering-platform
 
-frameworkVersion: '3'
+frameworkVersion: '4'
 
 provider:
   name: aws
@@ -9,15 +9,37 @@ provider:
   stage: ${opt:stage, 'dev'}
   memorySize: 512
   timeout: 30
+  httpApi:
+    cors:
+      allowedOrigins:
+        - '*'
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        - X-Amz-User-Agent
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowCredentials: false
   
   environment:
     STAGE: ${self:provider.stage}
     DYNAMODB_TABLE_PREFIX: ${self:service}-${self:provider.stage}
     JWT_SECRET: ${env:JWT_SECRET}
-    BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'anthropic.claude-3-5-sonnet-20241022-v2:0'}
     GEMINI_API_KEY: ${env:GEMINI_API_KEY}
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL}
+    FROM_EMAIL: ${env:FROM_EMAIL}
     FRONTEND_URL: ${env:FRONTEND_URL}
+    AWS_BEARER_TOKEN_BEDROCK: ${env:AWS_BEARER_TOKEN_BEDROCK}
+    DEFAULT_PROJECT_LIMIT: ${env:DEFAULT_PROJECT_LIMIT, '3'}
+    BACKDOOR_USER_EMAIL: ${env:BACKDOOR_USER_EMAIL}
   
   iam:
     role:
@@ -64,91 +86,166 @@ provider:
 functions:
   # Authentication Functions
   auth-login:
-    handler: src/handlers/auth.login
+    handler: dist/handlers/auth.login
     events:
       - http:
           path: /auth/login
           method: post
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
 
   auth-register:
-    handler: src/handlers/auth.register
+    handler: dist/handlers/auth.register
     events:
       - http:
           path: /auth/register
           method: post
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
 
   auth-me:
-    handler: src/handlers/auth.me
+    handler: dist/handlers/auth.me
     events:
       - http:
           path: /auth/me
           method: get
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+            methods:
+              - GET
+              - OPTIONS
           authorizer:
             name: authorizer
             type: request
 
   # Project Functions
   projects-create:
-    handler: src/handlers/projects.create
+    handler: dist/handlers/projects.create
     events:
       - http:
           path: /projects
           method: post
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
           authorizer:
             name: authorizer
             type: request
 
   projects-list:
-    handler: src/handlers/projects.list
+    handler: dist/handlers/projects.list
     events:
       - http:
           path: /projects
           method: get
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
           authorizer:
             name: authorizer
             type: request
 
   projects-get:
-    handler: src/handlers/projects.get
+    handler: dist/handlers/projects.get
     events:
       - http:
-          path: /projects/{id}
+          path: /projects/{projectId}
           method: get
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
           authorizer:
             name: authorizer
             type: request
 
   projects-update:
-    handler: src/handlers/projects.update
+    handler: dist/handlers/projects.update
     events:
       - http:
-          path: /projects/{id}
+          path: /projects/{projectId}
           method: put
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
           authorizer:
             name: authorizer
             type: request
 
   projects-delete:
-    handler: src/handlers/projects.delete
+    handler: dist/handlers/projects.delete
     events:
       - http:
-          path: /projects/{id}
+          path: /projects/{projectId}
           method: delete
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
           authorizer:
             name: authorizer
             type: request
 
   # AI Generation Functions
   ai-generate-phase:
-    handler: src/handlers/ai.generatePhase
+    handler: dist/handlers/ai.generatePhase
     timeout: 60
     memorySize: 1024
     events:
@@ -161,7 +258,7 @@ functions:
             type: request
 
   ai-generate-sprint:
-    handler: src/handlers/ai.generateSprint
+    handler: dist/handlers/ai.generateSprint
     timeout: 60
     memorySize: 1024
     events:
@@ -175,7 +272,7 @@ functions:
 
   # Template Functions
   templates-list:
-    handler: src/handlers/templates.list
+    handler: dist/handlers/templates.list
     events:
       - http:
           path: /templates
@@ -186,7 +283,7 @@ functions:
             type: request
 
   templates-generate:
-    handler: src/handlers/templates.generate
+    handler: dist/handlers/templates.generate
     timeout: 60
     events:
       - http:
@@ -199,7 +296,7 @@ functions:
 
   # Analytics Functions
   analytics-project:
-    handler: src/handlers/analytics.getProjectAnalytics
+    handler: dist/handlers/analytics.getProjectAnalytics
     events:
       - http:
           path: /projects/{projectId}/analytics
@@ -211,7 +308,7 @@ functions:
 
   # Risk Assessment Functions
   risk-assess:
-    handler: src/handlers/risk.assess
+    handler: dist/handlers/risk.assess
     timeout: 60
     events:
       - http:
@@ -224,7 +321,7 @@ functions:
 
   # Export Functions
   export-project:
-    handler: src/handlers/export.exportProject
+    handler: dist/handlers/export.exportProject
     timeout: 120
     memorySize: 2048
     events:
@@ -238,10 +335,33 @@ functions:
 
   # Authorizer Function
   authorizer:
-    handler: src/handlers/authorizer.handler
+    handler: dist/handlers/authorizer.handler
 
 resources:
   Resources:
+    # API Gateway CORS Configuration
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+    
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+    
     # DynamoDB Tables
     UsersTable:
       Type: AWS::DynamoDB::Table
@@ -326,10 +446,26 @@ resources:
           AttributeName: ttl
           Enabled: true
 
-plugins:
-  - serverless-plugin-typescript
-  - serverless-offline
+plugins: []
 
-custom:
-  serverless-offline:
-    httpPort: 3001
+package:
+  individually: false
+  patterns:
+    - '!src/**'
+    - 'dist/**'
+    - 'node_modules/**'
+    - '!node_modules/@types/**'
+    - '!node_modules/typescript/**'
+    - '!node_modules/serverless*/**'
+    - '!node_modules/.bin/**'
+    - '!node_modules/**/*.md'
+    - '!node_modules/**/test/**'
+    - '!node_modules/**/tests/**'
+    - '!**/*.md'
+    - '!**/*.map'
+    - '!.env'
+    - '!tsconfig.json'
+    - '!*.ps1'
+    - '!README.md'
+    - '!response*.json'
+    - '!test-payload.json'

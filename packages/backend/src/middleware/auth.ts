@@ -55,6 +55,9 @@ export const authenticateToken = async (
   }
 };
 
+// Alias for backward compatibility
+export const requireAuth = authenticateToken;
+
 export const requireRole = (requiredRoles: string[]) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {

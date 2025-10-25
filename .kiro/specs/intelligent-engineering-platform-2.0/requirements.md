@@ -349,3 +349,18 @@ This specification defines the requirements for Intelligent Engineering Platform
 3. THE Platform SHALL support automated simulation workflows triggered by design changes or project milestones to ensure analysis remains current
 4. THE Platform SHALL provide visualization capabilities for simulation results within the platform interface including charts, graphs, and 3D result displays
 5. WHERE simulation parameters need updating, THE Platform SHALL push current design specifications and requirements to connected simulation tools automatically
+
+### Requirement 27
+
+**User Story:** As a Platform Administrator, I want the system deployed on AWS serverless architecture with dual-AI capabilities, so that the platform is scalable, cost-effective, and highly available with intelligent AI failover.
+
+#### Acceptance Criteria
+
+1. THE Platform SHALL deploy backend services as AWS Lambda functions with API Gateway providing RESTful endpoints for all platform operations
+2. THE Platform SHALL implement a dual-AI strategy using AWS Bedrock with Claude 3.5 Sonnet as the primary AI engine and Google Gemini as an intelligent fallback with automatic failover on rate limits or service issues
+3. THE Platform SHALL store all application data in DynamoDB with single-table design patterns providing millisecond latency for data operations
+4. THE Platform SHALL deploy the frontend application to S3 with CloudFront CDN distribution providing global edge caching and 99.9 percent uptime
+5. THE Platform SHALL implement comprehensive monitoring using CloudWatch with custom dashboards, alarms, and X-Ray tracing for distributed request tracking
+6. THE Platform SHALL provide automated backup and disaster recovery capabilities with DynamoDB point-in-time recovery and cross-region replication for critical data
+7. THE Platform SHALL send email notifications through Amazon SES with context-rich task assignments and project updates including bounce and complaint handling
+8. WHERE infrastructure management is required, THE Platform SHALL provide an administrative UI dashboard for monitoring Lambda functions, DynamoDB tables, CloudWatch logs, and system health metrics
