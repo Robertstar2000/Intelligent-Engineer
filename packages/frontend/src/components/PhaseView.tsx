@@ -3,6 +3,7 @@ import { Phase, Project } from '@shared/types';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { projectsApi } from '../utils/api';
 import { 
   Play, 
   Edit3, 
@@ -47,28 +48,14 @@ export const PhaseView: React.FC<PhaseViewProps> = ({
 
     setIsGenerating(true);
     try {
-      // TODO: Implement AI generation
-      // This would call the backend API to generate content
-      const response = await fetch('/api/ai/generate-phase-content', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          projectId: project.id,
-          phaseId: phase.id,
-          tuningSettings: phase.tuningSettings,
-        }),
+      const result = await projectsApi.generatePhase(project.id, phase.id, {
+        projectId: project.id,
+        phaseId: phase.id,
+        tuningSettings: phase.tuningSettings,
       });
-
-      if (response.ok) {
-        const result = await response.json();
-        setEditedOutput(result.content);
-        onUpdatePhase(phase.id, { output: result.content });
-      } else {
-        throw new Error('Failed to generate content');
-      }
+      
+      setEditedOutput(result.content);
+      onUpdatePhase(phase.id, { output: result.content });
     } catch (error) {
       console.error('Error generating content:', error);
       alert('Failed to generate content. Please try again.');

@@ -3,6 +3,7 @@ import { Project, ProjectAnalytics } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { projectsApi } from '../../utils/api';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -39,15 +40,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/projects/${project.id}/analytics?range=${timeRange}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnalytics(data);
+      const data = await projectsApi.getAnalytics(project.id, timeRange);
+      setAnalytics(data);
       }
     } catch (error) {
       console.error('Error loading analytics:', error);

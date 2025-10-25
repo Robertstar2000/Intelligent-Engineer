@@ -3,6 +3,7 @@ import { Project, RiskAssessment, Risk } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { projectsApi } from '../../utils/api';
 import { 
   AlertTriangle, 
   RefreshCw, 
@@ -30,12 +31,8 @@ export const RiskEnginePanel: React.FC<RiskEnginePanelProps> = ({ project }) => 
   const loadRiskAssessment = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/projects/${project.id}/risks/assess`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      if (response.ok) {
-        setAssessment(await response.json());
-      }
+      const data = await projectsApi.assessRisks(project.id, {});
+      setAssessment(data);
     } catch (error) {
       console.error('Error loading risk assessment:', error);
     } finally {

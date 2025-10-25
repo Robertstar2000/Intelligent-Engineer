@@ -144,4 +144,82 @@ export const projectsApi = {
   async updatePhase(projectId: string, phaseId: string, data: any) {
     return api.put<any>(`/projects/${projectId}/phases/${phaseId}`, data);
   },
+  async generatePhase(projectId: string, phaseId: string, data: any) {
+    return api.post<any>(`/projects/${projectId}/phases/${phaseId}/generate`, data);
+  },
+  async generateSprint(projectId: string, phaseId: string, sprintId: string, data: any) {
+    return api.post<any>(`/projects/${projectId}/phases/${phaseId}/sprints/${sprintId}/generate`, data);
+  },
+  async getAnalytics(projectId: string, range?: string) {
+    const params = range ? `?range=${range}` : '';
+    return api.get<any>(`/projects/${projectId}/analytics${params}`);
+  },
+  async assessRisks(projectId: string, data: any) {
+    return api.post<any>(`/projects/${projectId}/risks/assess`, data);
+  },
+  async exportProject(projectId: string, data: any) {
+    return api.post<any>(`/projects/${projectId}/export`, data);
+  },
+};
+
+// Templates API
+export const templatesApi = {
+  async list() {
+    return api.get<any[]>('/templates');
+  },
+  async generate(data: any) {
+    return api.post<any>('/templates/generate', data);
+  },
+};
+
+// Team API
+export const teamApi = {
+  async getMembers(projectId: string) {
+    return api.get<any[]>(`/team/${projectId}/members`);
+  },
+  async getActiveUsers(projectId: string) {
+    return api.get<any[]>(`/team/${projectId}/active`);
+  },
+  async inviteMember(projectId: string, data: any) {
+    return api.post<any>(`/team/${projectId}/invite`, data);
+  },
+  async updateMemberRole(projectId: string, memberId: string, data: any) {
+    return api.put<any>(`/team/${projectId}/members/${memberId}/role`, data);
+  },
+  async removeMember(projectId: string, memberId: string) {
+    return api.delete<any>(`/team/${projectId}/members/${memberId}`);
+  },
+};
+
+// Tasks API
+export const tasksApi = {
+  async getProjectTasks(projectId: string) {
+    return api.get<any[]>(`/tasks/project/${projectId}`);
+  },
+  async assignTask(data: any) {
+    return api.post<any>('/tasks/assign', data);
+  },
+  async updateTask(taskId: string, data: any) {
+    return api.put<any>(`/tasks/${taskId}`, data);
+  },
+};
+
+// AI API
+export const aiApi = {
+  async getProfiles() {
+    return api.get<any[]>('/ai/profiles');
+  },
+  async queryProject(projectId: string, data: any) {
+    return api.post<any>(`/projects/${projectId}/query`, data);
+  },
+};
+
+// Analytics API
+export const analyticsApi = {
+  async getComparative() {
+    return api.get<any>('/analytics/comparative');
+  },
+  async generateReport(reportType: string, projectId: string, data: any) {
+    return api.post<any>(`/reports/${reportType}/${projectId}`, data);
+  },
 };

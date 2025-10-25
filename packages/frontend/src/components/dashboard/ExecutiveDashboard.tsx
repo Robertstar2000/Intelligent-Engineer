@@ -3,6 +3,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ProgressBar } from '../ui/ProgressBar';
+import { analyticsApi } from '../../utils/api';
 import {
   TrendingUp,
   TrendingDown,
@@ -58,18 +59,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ userId }
     try {
       setLoading(true);
       setError(null);
-
-      const response = await fetch('/api/analytics/comparative', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load dashboard data');
-      }
-
-      const data = await response.json();
+      const data = await analyticsApi.getComparative();
       setDashboardData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
@@ -80,13 +70,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ userId }
 
   const generateReport = async (projectId: string, reportType: string) => {
     try {
-      const response = await fetch(`/api/reports/${reportType}/${projectId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ recipients: [] }),
+      await analyticsApi.generateReport(reportType, projectId, { recipients: [] });
       });
 
       if (!response.ok) {

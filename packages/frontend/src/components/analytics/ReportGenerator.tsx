@@ -3,6 +3,7 @@ import { Project, ExportFormat, StakeholderType } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { analyticsApi } from '../../utils/api';
 import { 
   FileText, 
   Download, 
@@ -104,20 +105,10 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
         setProgress(prev => Math.min(prev + 10, 90));
       }, 500);
 
-      const response = await fetch(`/api/projects/${project.id}/reports/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(config),
-      });
+      const result = await analyticsApi.generateReport(config.type, project.id, config);
 
       clearInterval(progressInterval);
-
-      if (response.ok) {
-        const result = await response.json();
-        setProgress(100);
+      setProgress(100);
         setDownloadUrl(result.downloadUrl);
         
         if (onReportGenerated) {

@@ -35,28 +35,46 @@ export const generatePhase = async (event: APIGatewayProxyEvent): Promise<APIGat
       return errorResponse('Phase not found', 404);
     }
 
-    // Build prompt
-    const prompt = buildPhasePrompt(project, phase);
+    let generatedContent: string;
+    let engine = 'mock';
+    let cached = false;
+    let tokensUsed = 0;
+    let cost = 0;
 
-    // Generate content using dual-AI service
-    const aiResponse = await aiService.generateContent({
-      prompt,
-      context: {
-        projectId,
-        phaseId,
-        phaseName: phase.name,
-      },
-      maxTokens: 4096,
-      temperature: 0.7,
-      useCache: true,
-    });
+    try {
+      // Build prompt
+      const prompt = buildPhasePrompt(project, phase);
+
+      // Generate content using dual-AI service
+      const aiResponse = await aiService.generateContent({
+        prompt,
+        context: {
+          projectId,
+          phaseId,
+          phaseName: phase.name,
+        },
+        maxTokens: 4096,
+        temperature: 0.7,
+        useCache: true,
+      });
+
+      generatedContent = aiResponse.content;
+      engine = aiResponse.engine;
+      cached = aiResponse.cached;
+      tokensUsed = aiResponse.tokensUsed || 0;
+      cost = aiResponse.cost || 0;
+    } catch (aiError: any) {
+      console.error('AI generation failed, using fallback:', aiError);
+      // Fallback to template-based content
+      generatedContent = generateFallbackPhaseContent(project, phase);
+    }
 
     // Update phase with generated content
     const updatedPhases = project.phases.map((p: any) => {
       if (p.id === phaseId) {
         return {
           ...p,
-          output: aiResponse.content,
+          output: generatedContent,
           status: 'in-progress',
         };
       }
@@ -69,15 +87,16 @@ export const generatePhase = async (event: APIGatewayProxyEvent): Promise<APIGat
     });
 
     return successResponse({
-      output: aiResponse.content,
-      engine: aiResponse.engine,
-      cached: aiResponse.cached,
-      tokensUsed: aiResponse.tokensUsed,
-      cost: aiResponse.cost,
+      content: generatedContent,
+      output: generatedContent,
+      engine,
+      cached,
+      tokensUsed,
+      cost,
     });
   } catch (error: any) {
     console.error('Generate phase error:', error);
-    return errorResponse(error.message || 'Failed to generate phase content');
+    return errorResponse(error.message || 'Failed to generate phase content', 500);
   }
 };
 
@@ -120,22 +139,40 @@ export const generateSprint = async (event: APIGatewayProxyEvent): Promise<APIGa
       return errorResponse('Sprint not found', 404);
     }
 
-    // Build prompt
-    const prompt = buildSprintPrompt(project, phase, sprint);
+    let generatedContent: string;
+    let engine = 'mock';
+    let cached = false;
+    let tokensUsed = 0;
+    let cost = 0;
 
-    // Generate content using dual-AI service
-    const aiResponse = await aiService.generateContent({
-      prompt,
-      context: {
-        projectId,
-        phaseId,
-        sprintId,
-        sprintName: sprint.name,
-      },
-      maxTokens: 2048,
-      temperature: 0.7,
-      useCache: true,
-    });
+    try {
+      // Build prompt
+      const prompt = buildSprintPrompt(project, phase, sprint);
+
+      // Generate content using dual-AI service
+      const aiResponse = await aiService.generateContent({
+        prompt,
+        context: {
+          projectId,
+          phaseId,
+          sprintId,
+          sprintName: sprint.name,
+        },
+        maxTokens: 2048,
+        temperature: 0.7,
+        useCache: true,
+      });
+
+      generatedContent = aiResponse.content;
+      engine = aiResponse.engine;
+      cached = aiResponse.cached;
+      tokensUsed = aiResponse.tokensUsed || 0;
+      cost = aiResponse.cost || 0;
+    } catch (aiError: any) {
+      console.error('AI generation failed, using fallback:', aiError);
+      // Fallback to template-based content
+      generatedContent = generateFallbackSprintContent(project, phase, sprint);
+    }
 
     // Update sprint with generated content
     const updatedPhases = project.phases.map((p: any) => {
@@ -144,7 +181,7 @@ export const generateSprint = async (event: APIGatewayProxyEvent): Promise<APIGa
           if (s.id === sprintId) {
             return {
               ...s,
-              output: aiResponse.content,
+              output: generatedContent,
               status: 'in-progress',
             };
           }
@@ -161,15 +198,16 @@ export const generateSprint = async (event: APIGatewayProxyEvent): Promise<APIGa
     });
 
     return successResponse({
-      output: aiResponse.content,
-      engine: aiResponse.engine,
-      cached: aiResponse.cached,
-      tokensUsed: aiResponse.tokensUsed,
-      cost: aiResponse.cost,
+      content: generatedContent,
+      output: generatedContent,
+      engine,
+      cached,
+      tokensUsed,
+      cost,
     });
   } catch (error: any) {
     console.error('Generate sprint error:', error);
-    return errorResponse(error.message || 'Failed to generate sprint content');
+    return errorResponse(error.message || 'Failed to generate sprint content', 500);
   }
 };
 
@@ -222,3 +260,196 @@ Please generate detailed content for this sprint including:
 Provide practical, detailed guidance for completing this sprint successfully.
 `.trim();
 }
+
+function generateFallbackPhaseContent(project: any, phase: any): string {
+  return `# ${phase.name}
+
+## Overview
+This phase focuses on ${phase.description.toLowerCase()}.
+
+## Objectives
+1. Complete all deliverables for the ${phase.name} phase
+2. Ensure quality standards are met
+3. Document all decisions and outcomes
+4. Prepare for the next phase
+
+## Key Activities
+
+### Planning
+- Review project requirements: ${project.requirements}
+- Identify key stakeholders
+- Define success criteria
+- Allocate resources
+
+### Execution
+- Follow the ${project.developmentMode} development approach
+- Implement best practices for ${project.disciplines.join(', ')}
+- Regular team check-ins and progress reviews
+- Quality assurance throughout
+
+### Documentation
+- Maintain comprehensive documentation
+- Track decisions and rationale
+- Update project artifacts
+- Prepare phase completion report
+
+## Deliverables
+${phase.deliverables ? phase.deliverables.map((d: string) => `- ${d}`).join('\n') : '- Phase completion documentation\n- Quality assurance reports\n- Updated project artifacts'}
+
+## Success Criteria
+- All planned activities completed
+- Quality standards met
+- Stakeholder approval obtained
+- Documentation up to date
+
+## Risks and Mitigation
+
+### Potential Risks
+1. **Schedule Delays**: Regular monitoring and early intervention
+2. **Resource Constraints**: Flexible resource allocation and prioritization
+3. **Technical Challenges**: Expert consultation and knowledge sharing
+4. **Quality Issues**: Continuous testing and review processes
+
+### Mitigation Strategies
+- Daily stand-ups for early issue detection
+- Clear communication channels
+- Regular stakeholder updates
+- Contingency planning
+
+## Next Steps
+1. Review and approve this phase plan
+2. Assign tasks to team members
+3. Set up tracking and monitoring
+4. Begin execution
+
+---
+*Note: This content was generated using a template. For AI-powered content generation, please ensure AI services are properly configured.*
+`;
+}
+
+function generateFallbackSprintContent(project: any, phase: any, sprint: any): string {
+  return `# ${sprint.name}
+
+## Sprint Overview
+${sprint.description}
+
+## Sprint Goals
+Complete the following deliverables:
+${sprint.deliverables.map((d: string) => `- ${d}`).join('\n')}
+
+## Tasks Breakdown
+
+### Week 1
+- Initial setup and planning
+- Environment configuration
+- Team alignment
+
+### Week 2
+- Core implementation
+- Progress reviews
+- Quality checks
+
+### Week 3 (if applicable)
+- Finalization
+- Testing and validation
+- Documentation
+
+## Technical Approach
+1. Follow ${project.developmentMode} development methodology
+2. Apply ${project.disciplines.join(' and ')} best practices
+3. Maintain code quality and documentation standards
+4. Regular code reviews and testing
+
+## Resources Needed
+- Development team
+- Testing environment
+- Documentation tools
+- Collaboration platforms
+
+## Quality Checkpoints
+- [ ] Code review completed
+- [ ] Unit tests passing
+- [ ] Integration tests passing
+- [ ] Documentation updated
+- [ ] Stakeholder review
+
+## Timeline
+- Start: As scheduled
+- Mid-sprint review: Week 2
+- Completion: End of sprint period
+
+---
+*Note: This content was generated using a template. For AI-powered content generation, please ensure AI services are properly configured.*
+`;
+}
+
+
+// Get AI profiles
+export const getProfiles = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    const userId = event.requestContext.authorizer?.userId;
+    if (!userId) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    // Mock AI profiles
+    const profiles = [
+      {
+        id: 'claude-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        description: 'Advanced AI for complex reasoning and analysis',
+        capabilities: ['code-generation', 'analysis', 'documentation'],
+        isActive: true
+      },
+      {
+        id: 'claude-haiku',
+        name: 'Claude 3 Haiku',
+        description: 'Fast AI for quick tasks and responses',
+        capabilities: ['quick-responses', 'summaries'],
+        isActive: true
+      }
+    ];
+
+    return successResponse(profiles);
+  } catch (error) {
+    console.error('Error getting AI profiles:', error);
+    return errorResponse('Internal server error', 500);
+  }
+};
+
+// Query project with AI
+export const queryProject = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    const userId = event.requestContext.authorizer?.userId;
+    if (!userId) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const projectId = event.pathParameters?.projectId;
+    if (!projectId) {
+      return errorResponse('Project ID is required', 400);
+    }
+
+    const body = JSON.parse(event.body || '{}');
+    const { query, context } = body;
+
+    if (!query) {
+      return errorResponse('Query is required', 400);
+    }
+
+    // Mock AI query response
+    const response = {
+      query,
+      projectId,
+      response: `Based on your project analysis, here are my insights about "${query}": This appears to be related to your project requirements and current progress. I recommend focusing on the key deliverables and ensuring proper documentation throughout the development process.`,
+      confidence: 0.85,
+      sources: ['project-requirements', 'phase-documentation'],
+      timestamp: new Date().toISOString()
+    };
+
+    return successResponse(response);
+  } catch (error) {
+    console.error('Error querying project:', error);
+    return errorResponse('Internal server error', 500);
+  }
+};

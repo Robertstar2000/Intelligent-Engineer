@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Phase, TeamMember, TaskAssignment } from '@shared/types';
+import { teamApi, tasksApi } from '../utils/api';
 
 interface UsePhaseCollaborationOptions {
   projectId: string;
@@ -56,17 +57,7 @@ export const usePhaseCollaboration = (options: UsePhaseCollaborationOptions): Us
 
   const loadTeamMembers = async () => {
     try {
-      const response = await fetch(`/api/team/${projectId}/members`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load team members');
-      }
-
-      const members = await response.json();
+      const members = await teamApi.getMembers(projectId);
       setTeamMembers(members);
     } catch (err) {
       console.error('Error loading team members:', err);
@@ -76,17 +67,7 @@ export const usePhaseCollaboration = (options: UsePhaseCollaborationOptions): Us
 
   const loadPhaseTasks = async () => {
     try {
-      const response = await fetch(`/api/tasks/project/${projectId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load phase tasks');
-      }
-
-      const allTasks = await response.json();
+      const allTasks = await tasksApi.getProjectTasks(projectId);
       // Filter tasks for this specific phase
       const phaseSpecificTasks = allTasks.filter((task: TaskAssignment) => task.phaseId === phaseId);
       setPhaseTasks(phaseSpecificTasks);
@@ -98,16 +79,8 @@ export const usePhaseCollaboration = (options: UsePhaseCollaborationOptions): Us
 
   const loadActiveUsers = async () => {
     try {
-      const response = await fetch(`/api/team/${projectId}/active`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const users = await response.json();
-        setActiveUsers(users);
-      }
+      const users = await teamApi.getActiveUsers(projectId);
+      setActiveUsers(users);
     } catch (err) {
       console.error('Error loading active users:', err);
       // Don't throw here as this is not critical
@@ -121,28 +94,14 @@ export const usePhaseCollaboration = (options: UsePhaseCollaborationOptions): Us
     estimatedHours?: number
   ) => {
     try {
-      const response = await fetch('/api/tasks/assign', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          projectId,
-          phaseId,
-          sprintId,
-          assignedTo,
-          assignedRole: role,
-          estimatedHours,
-        }),
+      const newTask = await tasksApi.assignTask({
+        projectId,
+        phaseId,
+        sprintId,
+        assignedTo,
+        assignedRole: role,
+        estimatedHours,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to assign task');
-      }
-
-      const newTask = await response.json();
       setPhaseTasks(prev => [...prev, newTask]);
 
       // Refresh data to get updated state
@@ -155,21 +114,7 @@ export const usePhaseCollaboration = (options: UsePhaseCollaborationOptions): Us
 
   const updateTaskStatus = useCallback(async (taskId: string, status: string) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ status }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update task status');
-      }
-
-      const updatedTask = await response.json();
+      const updatedTask = await tasksApi.updateTask(taskId, { status });
       
       // Update local state
       setPhaseTasks(prev => prev.map(task => 

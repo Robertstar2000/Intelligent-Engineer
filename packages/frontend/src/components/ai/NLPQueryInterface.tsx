@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Search, Sparkles, TrendingUp } from 'lucide-react';
+import { aiApi } from '../../utils/api';
 
 interface NLPQueryInterfaceProps {
   projectId: string;
@@ -23,17 +24,8 @@ export const NLPQueryInterface: React.FC<NLPQueryInterfaceProps> = ({ projectId 
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/projects/${projectId}/query`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ query }),
-      });
-      if (response.ok) {
-        setResults(await response.json());
-      }
+      const data = await aiApi.queryProject(projectId, { query });
+      setResults(data);
     } catch (error) {
       console.error('Query error:', error);
     } finally {

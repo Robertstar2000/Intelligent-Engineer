@@ -3,6 +3,7 @@ import { TaskAssignment } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { tasksApi } from '../../utils/api';
 import { 
   Clock, 
   Calendar, 
@@ -43,26 +44,15 @@ export const TaskList: React.FC<TaskListProps> = ({
       setLoading(true);
       setError(null);
 
-      let url = '/api/tasks/';
+      let tasksData;
       if (projectId) {
-        url += `project/${projectId}`;
-      } else if (userId) {
-        url += `user/${userId}`;
+        tasksData = await tasksApi.getProjectTasks(projectId);
       } else {
-        url += 'my-tasks';
+        // For user-specific or my-tasks, we'll use project tasks for now
+        // In a real implementation, you'd have separate endpoints
+        tasksData = [];
       }
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load tasks');
-      }
-
-      const tasksData = await response.json();
       setTasks(tasksData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
@@ -73,20 +63,7 @@ export const TaskList: React.FC<TaskListProps> = ({
 
   const handleStatusUpdate = async (taskId: string, newStatus: TaskAssignment['status']) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update task status');
-      }
-
-      const updatedTask = await response.json();
+      const updatedTask = await tasksApi.updateTask(taskId, { status: newStatus });
       
       // Update local state
       setTasks(prev => prev.map(task => 

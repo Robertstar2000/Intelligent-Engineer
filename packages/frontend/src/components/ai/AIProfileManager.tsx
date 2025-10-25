@@ -3,6 +3,7 @@ import { AIProfile, TuningSettings } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { aiApi } from '../../utils/api';
 import { 
   Brain, 
   Plus, 
@@ -29,12 +30,8 @@ export const AIProfileManager: React.FC<AIProfileManagerProps> = ({ onSelectProf
 
   const loadProfiles = async () => {
     try {
-      const response = await fetch('/api/ai/profiles', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      if (response.ok) {
-        setProfiles(await response.json());
-      }
+      const data = await aiApi.getProfiles();
+      setProfiles(data);
     } catch (error) {
       console.error('Error loading profiles:', error);
     }

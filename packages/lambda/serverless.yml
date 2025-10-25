@@ -333,6 +333,74 @@ functions:
             name: authorizer
             type: request
 
+  # Task Functions
+  tasks-list-by-project:
+    handler: dist/handlers/tasks.listByProject
+    events:
+      - http:
+          path: /tasks/project/{projectId}
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  tasks-assign:
+    handler: dist/handlers/tasks.assignTask
+    events:
+      - http:
+          path: /tasks/assign
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  tasks-update:
+    handler: dist/handlers/tasks.updateTask
+    events:
+      - http:
+          path: /tasks/{taskId}
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  # Team Functions
+  team-get-members:
+    handler: dist/handlers/team.getMembers
+    events:
+      - http:
+          path: /team/{projectId}/members
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  team-get-active:
+    handler: dist/handlers/team.getActiveUsers
+    events:
+      - http:
+          path: /team/{projectId}/active
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
+  team-invite:
+    handler: dist/handlers/team.inviteMember
+    events:
+      - http:
+          path: /team/{projectId}/invite
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: request
+
   # Authorizer Function
   authorizer:
     handler: dist/handlers/authorizer.handler

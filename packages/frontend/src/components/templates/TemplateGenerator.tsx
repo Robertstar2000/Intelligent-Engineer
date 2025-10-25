@@ -3,6 +3,7 @@ import { Template, ProgramScale } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { templatesApi } from '../../utils/api';
 import { 
   Wand2, 
   ChevronRight, 
@@ -105,23 +106,11 @@ export const TemplateGenerator: React.FC<TemplateGeneratorProps> = ({
   const handleGenerate = async () => {
     try {
       setGenerating(true);
-
-      const response = await fetch('/api/templates/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(config),
-      });
-
-      if (response.ok) {
-        const template = await response.json();
-        setGeneratedTemplate(template);
-        
-        if (onTemplateGenerated) {
-          onTemplateGenerated(template);
-        }
+      const template = await templatesApi.generate(config);
+      setGeneratedTemplate(template);
+      
+      if (onTemplateGenerated) {
+        onTemplateGenerated(template);
       }
     } catch (error) {
       console.error('Error generating template:', error);

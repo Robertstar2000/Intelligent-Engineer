@@ -4,6 +4,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Users, UserPlus, Settings, MoreVertical, Mail, Clock, Shield } from 'lucide-react';
+import { teamApi } from '../../utils/api';
 import { InviteTeamMemberModal } from './InviteTeamMemberModal';
 import { TeamMemberCard } from './TeamMemberCard';
 import { ActiveUsersIndicator } from './ActiveUsersIndicator';
@@ -37,17 +38,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const loadTeamMembers = async () => {
     try {
-      const response = await fetch(`/api/team/${projectId}/members`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load team members');
-      }
-
-      const members = await response.json();
+      const members = await teamApi.getMembers(projectId);
       setTeamMembers(members);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load team members');
@@ -58,16 +49,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const loadActiveUsers = async () => {
     try {
-      const response = await fetch(`/api/team/${projectId}/active`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const users = await response.json();
-        setActiveUsers(users);
-      }
+      const users = await teamApi.getActiveUsers(projectId);
+      setActiveUsers(users);
     } catch (err) {
       console.error('Failed to load active users:', err);
     }
@@ -75,24 +58,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const handleInviteMember = async (email: string, role: DynamicRole) => {
     try {
-      const response = await fetch(`/api/team/${projectId}/invite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ email, role }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to invite team member');
-      }
-
-      const result = await response.json();
+      const result = await teamApi.inviteMember(projectId, { email, role });
       
       // Show success message
-      alert(result.message);
+      alert('Team member invited successfully');
       
       // Reload team members
       await loadTeamMembers();
@@ -132,18 +101,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     }
 
     try {
-      const response = await fetch(`/api/team/${projectId}/members/${memberId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to remove team member');
-      }
-
+      await teamApi.removeMember(projectId, memberId);
       // Reload team members
       await loadTeamMembers();
     } catch (err) {

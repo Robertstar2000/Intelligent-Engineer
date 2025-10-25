@@ -3,6 +3,7 @@ import { Phase, Project, TeamMember, TaskAssignment, DynamicRole } from '@shared
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { teamApi, tasksApi } from '../../utils/api';
 import { 
   Users, 
   UserPlus, 
@@ -59,16 +60,8 @@ export const CollaborativePhaseView: React.FC<CollaborativePhaseViewProps> = ({
 
   const loadActiveUsers = async () => {
     try {
-      const response = await fetch(`/api/team/${project.id}/active`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const users = await response.json();
-        setActiveUsers(users);
-      }
+      const users = await teamApi.getActiveUsers(project.id);
+      setActiveUsers(users);
     } catch (err) {
       console.error('Failed to load active users:', err);
     }
@@ -84,25 +77,14 @@ export const CollaborativePhaseView: React.FC<CollaborativePhaseViewProps> = ({
     if (!selectedSprint) return;
 
     try {
-      const response = await fetch('/api/tasks/assign', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          projectId: project.id,
-          phaseId: phase.id,
-          sprintId: selectedSprint.id,
-          assignedTo,
-          assignedRole: role,
-          estimatedHours,
-        }),
+      await tasksApi.assignTask({
+        projectId: project.id,
+        phaseId: phase.id,
+        sprintId: selectedSprint.id,
+        assignedTo,
+        assignedRole: role,
+        estimatedHours,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to assign task');
-      }
 
       // Update sprint status
       const updatedSprints = phase.sprints.map(sprint =>

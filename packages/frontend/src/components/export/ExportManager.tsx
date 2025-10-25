@@ -3,6 +3,7 @@ import { Project, ExportFormat } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { projectsApi } from '../../utils/api';
 import { 
   Download, 
   FileText, 
@@ -28,16 +29,8 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ project }) => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const response = await fetch(`/api/projects/${project.id}/export`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ format: selectedFormat }),
-      });
-      if (response.ok) {
-        const result = await response.json();
+      const result = await projectsApi.exportProject(project.id, { format: selectedFormat });
+      if (result.downloadUrl) {
         window.open(result.downloadUrl, '_blank');
       }
     } catch (error) {

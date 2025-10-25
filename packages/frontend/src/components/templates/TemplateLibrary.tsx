@@ -3,6 +3,7 @@ import { Template } from '@shared/types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { templatesApi } from '../../utils/api';
 import { 
   FileText, 
   Search, 
@@ -38,16 +39,8 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const loadTemplates = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/templates', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data);
-      }
+      const data = await templatesApi.list();
+      setTemplates(data);
     } catch (error) {
       console.error('Error loading templates:', error);
     } finally {
