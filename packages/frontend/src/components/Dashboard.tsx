@@ -20,7 +20,10 @@ import {
   AlertTriangle,
   Zap,
   Target,
-  Layers
+  Layers,
+  Plug,
+  GitBranch,
+  FileCheck
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -99,19 +102,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       icon: Shield,
       title: 'Risk Assessment',
       description: 'Identify and mitigate project risks',
-      link: '/risks',
+      link: projects.length > 0 ? `/projects/${projects[0].id}/risks` : '/projects',
     },
     {
       icon: FileText,
-      title: 'Documentation',
+      title: 'Documentation Export',
       description: 'Export projects in multiple formats',
-      link: '/export',
+      link: projects.length > 0 ? `/projects/${projects[0].id}/export` : '/projects',
     },
     {
       icon: Search,
       title: 'NLP Queries',
       description: 'Ask questions about your projects',
-      link: '/query',
+      link: '/ai',
     },
   ];
 
@@ -133,37 +136,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="max-w-7xl mx-auto space-y-4">
         {/* Welcome Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">
+        <div className="modern-gradient rounded-lg p-4 text-white">
+          <h1 className="text-xl font-bold mb-1">
             Welcome back, {user?.name || 'User'}!
           </h1>
-          <p className="text-blue-100">
+          <p className="text-sm text-blue-100">
             Manage your engineering projects with AI-powered tools
           </p>
         </div>
 
         {/* Quick Actions */}
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <h2 className="modern-header">Quick Actions</h2>
+          <div className="modern-grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
             {quickActions.map((action, index) => (
               <Card
                 key={index}
-                className="p-6 hover:shadow-lg transition-all cursor-pointer"
+                className="p-4 modern-hover cursor-pointer"
                 onClick={action.action}
               >
-                <div className={`${action.color} w-12 h-12 rounded-lg flex items-center justify-center mb-4`}>
-                  <action.icon className="w-6 h-6 text-white" />
+                <div className={`${action.color} w-10 h-10 rounded-lg flex items-center justify-center mb-3`}>
+                  <action.icon className="modern-icon-lg text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-0.5">
                   {action.label}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="modern-text-xs">
                   {action.description}
                 </p>
               </Card>
@@ -173,55 +174,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         {/* Stats Overview */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-6">
+          <div className="modern-grid grid-cols-1 md:grid-cols-4">
+            <Card className="modern-stat-card">
               <div className="flex items-center justify-between mb-2">
-                <Target className="w-8 h-8 text-blue-600" />
-                <Badge variant="info">Active</Badge>
+                <Target className="w-6 h-6 text-blue-600" />
+                <Badge variant="info" size="sm">Active</Badge>
               </div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="modern-stat-value">
                 {projects.length}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="modern-stat-label">
                 Total Projects
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className="modern-stat-card">
               <div className="flex items-center justify-between mb-2">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-                <TrendingUp className="w-4 h-4 text-green-600" />
+                <CheckCircle className="w-6 h-6 text-green-600" />
+                <TrendingUp className="modern-icon text-green-600" />
               </div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="modern-stat-value">
                 {stats.averageCompletion?.toFixed(0) || 0}%
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="modern-stat-label">
                 Avg Completion
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className="modern-stat-card">
               <div className="flex items-center justify-between mb-2">
-                <Zap className="w-8 h-8 text-purple-600" />
-                <TrendingUp className="w-4 h-4 text-purple-600" />
+                <Zap className="w-6 h-6 text-purple-600" />
+                <TrendingUp className="modern-icon text-purple-600" />
               </div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="modern-stat-value">
                 {stats.averageVelocity?.toFixed(1) || 0}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="modern-stat-label">
                 Team Velocity
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className="modern-stat-card">
               <div className="flex items-center justify-between mb-2">
-                <Clock className="w-8 h-8 text-orange-600" />
-                <Badge variant="warning">Active</Badge>
+                <Clock className="w-6 h-6 text-orange-600" />
+                <Badge variant="warning" size="sm">Active</Badge>
               </div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="modern-stat-value">
                 {projects.filter(p => p.status === 'in-progress').length}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="modern-stat-label">
                 In Progress
               </div>
             </Card>
@@ -230,10 +231,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         {/* Recent Projects */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Recent Projects
-            </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="modern-header">Recent Projects</h2>
             <Button variant="outline" size="sm" onClick={() => navigate('/projects')}>
               View All
             </Button>
@@ -256,19 +255,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="modern-grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {projects.slice(0, 6).map((project) => (
                 <Card
                   key={project.id}
-                  className="p-6 hover:shadow-lg transition-all cursor-pointer"
+                  className="p-4 modern-hover cursor-pointer"
                   onClick={() => navigate(`/projects/${project.id}`)}
                 >
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-0.5">
                         {project.name}
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                      <p className="modern-text-xs line-clamp-2">
                         {project.description}
                       </p>
                     </div>
@@ -283,26 +282,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </Badge>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between modern-text-xs">
                       <span>Progress</span>
                       <span>{project.progress || 0}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                       <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        className="bg-blue-600 h-1.5 rounded-full transition-all"
                         style={{ width: `${project.progress || 0}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="mt-3 flex items-center space-x-3 modern-text-xs">
                     <div className="flex items-center">
-                      <Layers className="w-3 h-3 mr-1" />
+                      <Layers className="modern-icon mr-1" />
                       {project.phases?.length || 0} phases
                     </div>
                     <div className="flex items-center">
-                      <Users className="w-3 h-3 mr-1" />
+                      <Users className="modern-icon mr-1" />
                       {project.team?.length || 0} members
                     </div>
                   </div>
@@ -359,25 +358,81 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         {/* Platform Features */}
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Platform Features
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <h2 className="modern-header">Platform Features</h2>
+          <div className="modern-grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className="p-6 hover:shadow-lg transition-all cursor-pointer"
+                className="p-4 modern-hover cursor-pointer"
                 onClick={() => navigate(feature.link)}
               >
-                <feature.icon className="w-10 h-10 text-blue-600 mb-4" />
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                <feature.icon className="w-8 h-8 text-blue-600 mb-3" />
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
                   {feature.title}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="modern-text-xs">
                   {feature.description}
                 </p>
               </Card>
             ))}
+          </div>
+        </div>
+
+        {/* Enterprise Features */}
+        <div>
+          <h2 className="modern-header">Enterprise Features</h2>
+          <div className="modern-grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+            <Card
+              className="p-4 modern-hover cursor-pointer"
+              onClick={() => navigate('/compliance')}
+            >
+              <FileCheck className="w-8 h-8 text-green-600 mb-3" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                Compliance
+              </h3>
+              <p className="modern-text-xs">
+                Track regulatory standards
+              </p>
+            </Card>
+
+            <Card
+              className="p-4 modern-hover cursor-pointer"
+              onClick={() => navigate('/audit')}
+            >
+              <FileText className="w-8 h-8 text-purple-600 mb-3" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                Audit Trail
+              </h3>
+              <p className="modern-text-xs">
+                Complete activity history
+              </p>
+            </Card>
+
+            <Card
+              className="p-4 modern-hover cursor-pointer"
+              onClick={() => navigate(projects.length > 0 ? `/projects/${projects[0].id}/versions` : '/projects')}
+            >
+              <GitBranch className="w-8 h-8 text-indigo-600 mb-3" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                Version Control
+              </h3>
+              <p className="modern-text-xs">
+                Manage project versions
+              </p>
+            </Card>
+
+            <Card
+              className="p-4 modern-hover cursor-pointer"
+              onClick={() => navigate('/integrations')}
+            >
+              <Plug className="w-8 h-8 text-orange-600 mb-3" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                Integrations
+              </h3>
+              <p className="modern-text-xs">
+                Connect external tools
+              </p>
+            </Card>
           </div>
         </div>
 

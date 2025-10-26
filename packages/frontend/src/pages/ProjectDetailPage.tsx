@@ -5,7 +5,7 @@ import { EnhancedPhaseView } from '../components/EnhancedPhaseView';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { ArrowLeft, Users, Settings, Download } from 'lucide-react';
+import { ArrowLeft, Users, Settings, Download, Shield, GitBranch, FileText } from 'lucide-react';
 
 export const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -112,17 +112,26 @@ export const ProjectDetailPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/projects/${projectId}/export`)}
+              onClick={() => navigate(`/projects/${projectId}/risks`)}
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              <Shield className="w-4 h-4 mr-2" />
+              Risks
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/projects/${projectId}/settings`)}
+              onClick={() => navigate(`/projects/${projectId}/versions`)}
             >
-              <Settings className="w-4 h-4" />
+              <GitBranch className="w-4 h-4 mr-2" />
+              Versions
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/projects/${projectId}/export`)}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
           </div>
         </div>

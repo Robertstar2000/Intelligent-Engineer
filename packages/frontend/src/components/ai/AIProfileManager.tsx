@@ -152,9 +152,18 @@ export const AIProfileManager: React.FC<AIProfileManagerProps> = ({ onSelectProf
                 Cancel
               </Button>
               <Button variant="primary" onClick={async () => {
-                // Save profile logic
-                setShowEditor(false);
-                await loadProfiles();
+                try {
+                  if (editingProfile.id) {
+                    await aiApi.updateProfile(editingProfile.id, editingProfile);
+                  } else {
+                    await aiApi.createProfile(editingProfile);
+                  }
+                  setShowEditor(false);
+                  await loadProfiles();
+                } catch (error) {
+                  console.error('Error saving profile:', error);
+                  alert('Failed to save profile');
+                }
               }}>
                 <Save className="w-4 h-4 mr-2" />
                 Save Profile

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { AppRouter } from './AppRouter';
 import { ThemeProvider } from './theme';
 import './styles/responsive.css';
+import './styles/modern.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 
