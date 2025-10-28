@@ -3,6 +3,7 @@ import { Sliders, Edit3, Save } from 'lucide-react';
 import { Button, Card } from './ui';
 import { Remarkable } from 'remarkable';
 import { Phase } from '../types';
+import { MarkdownEditor } from './MarkdownEditor';
 
 declare const Prism: any;
 
@@ -21,7 +22,6 @@ const md = new Remarkable({
     },
 });
 
-// FIX: Added props type for PhaseOutput, including apiKey to remove process.env dependency.
 interface PhaseOutputProps {
     phase: Phase;
     onGenerate: () => void;
@@ -62,7 +62,6 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                 {!phase.output ? (
                     <div className="text-center py-8">
                         <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
-                        {/* FIX: Use apiKey prop instead of process.env.API_KEY */}
                         <Button onClick={onGenerate} disabled={!apiKey || isLoading}>
                             {isLoading ? (
                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>
@@ -81,7 +80,6 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                                             <Edit3 className="mr-2 w-4 h-4" />Edit
                                         </Button>
-                                        {/* FIX: Use apiKey prop instead of process.env.API_KEY */}
                                         <Button variant="outline" size="sm" onClick={onGenerate} disabled={!apiKey || isLoading}>
                                             {isLoading ? (
                                                 <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>Regenerating...</>
@@ -95,10 +93,9 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                         </div>
                         {isEditing ? (
                             <div className="space-y-3">
-                                <textarea
+                                <MarkdownEditor
                                     value={editedOutput}
-                                    onChange={(e) => setEditedOutput(e.target.value)}
-                                    className="w-full h-96 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+                                    onChange={setEditedOutput}
                                 />
                                 <div className="flex space-x-2">
                                     <Button size="sm" onClick={handleSave}>

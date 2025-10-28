@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-g" />
+    <meta charset="UTF-8" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Intelligent Engineering Partner</title>
+    <title>Intelligent Engineer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -15,7 +15,16 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+              sans: ['Space Grotesk', 'sans-serif'],
+            },
+            colors: {
+              'brand-primary': '#4ECDC4', // teal
+              'brand-secondary': '#AA96DA', // purple
+              'brand-accent': '#FF6B6B', // red
+              'brand-yellow': '#FFE66D',
+              'charcoal-900': '#121212',
+              'charcoal-800': '#1E1E1E',
+              'charcoal-700': '#2C2C2C',
             },
             typography: (theme) => ({
               DEFAULT: {
@@ -37,18 +46,18 @@
                   '--tw-prose-td-borders': theme('colors.gray[200]'),
                   '--tw-prose-invert-body': theme('colors.gray[300]'),
                   '--tw-prose-invert-headings': theme('colors.white'),
-                  '--tw-prose-invert-links': theme('colors.blue[400]'),
+                  '--tw-prose-invert-links': theme('colors.brand-primary'),
                   '--tw-prose-invert-bold': theme('colors.white'),
                   '--tw-prose-invert-counters': theme('colors.gray[400]'),
                   '--tw-prose-invert-bullets': theme('colors.gray[600]'),
-                  '--tw-prose-invert-hr': theme('colors.gray[700]'),
+                  '--tw-prose-invert-hr': theme('colors.charcoal-700'),
                   '--tw-prose-invert-quotes': theme('colors.gray[100]'),
-                  '--tw-prose-invert-quote-borders': theme('colors.gray[700]'),
+                  '--tw-prose-invert-quote-borders': theme('colors.charcoal-700'),
                   '--tw-prose-invert-captions': theme('colors.gray[400]'),
                   '--tw-prose-invert-pre-code': theme('colors.gray[300]'),
                   '--tw-prose-invert-pre-bg': 'rgb(0 0 0 / 50%)',
                   '--tw-prose-invert-th-borders': theme('colors.gray[600]'),
-                  '--tw-prose-invert-td-borders': theme('colors.gray[700]'),
+                  '--tw-prose-invert-td-borders': theme('colors.charcoal-700'),
                 },
               },
             }),
@@ -65,7 +74,7 @@
         width: 16px;
         height: 16px;
         background: #fff;
-        border: 2px solid #4f46e5;
+        border: 2px solid #4ECDC4;
         border-radius: 50%;
         cursor: pointer;
       }
@@ -73,7 +82,7 @@
         width: 16px;
         height: 16px;
         background: #fff;
-        border: 2px solid #4f46e5;
+        border: 2px solid #4ECDC4;
         border-radius: 50%;
         cursor: pointer;
       }
@@ -111,7 +120,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+  <body class="bg-gray-50 dark:bg-charcoal-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>

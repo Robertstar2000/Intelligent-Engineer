@@ -12,15 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# AWS and Serverless
-.serverless/
-*.zip
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

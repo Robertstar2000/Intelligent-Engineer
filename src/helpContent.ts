@@ -1,3 +1,4 @@
+
 export const HELP_CONTENT = `
 # Intelligent Engineering Partner - Help Guide
 
@@ -75,9 +76,9 @@ This tool has several professional engineering processes built directly into the
 
 ## 5. API Key Configuration
 
-This application is powered by the Google Gemini API and requires a valid API key to function. The application is designed to be pre-configured with a secure API key provided via an environment variable. You do not need to enter an API key yourself.
+This application is powered by the Google Gemini API. It is designed to be pre-configured with a secure API key provided by the application administrator. You do not need to enter an API key yourself.
 
-If AI features appear disabled or return errors, it indicates that the API key has not been configured correctly in the application's deployment environment. Please contact the application administrator for assistance.
+If AI features appear disabled or return errors, it indicates a problem with the API key configuration in the application's environment. In this case, please contact your administrator for assistance.
 
 ## 6. Project Exports & Handoff
 
@@ -89,16 +90,7 @@ Once you have generated documentation for your project, the **Documents** page p
 -   **Structure**: The archive is neatly organized into folders, one for each phase of your project. It also includes a top-level \`00_Project_Summary.md\` file containing your initial requirements, constraints, and disciplines.
 -   **Value**: This is the perfect way to create a permanent, offline record of your project. It's ideal for version control, sharing with stakeholders, or meeting compliance requirements.
 
-### B) Design Summary (Project Management)
-
--   **What it is**: A structured JSON file containing a concise summary of your project's design, a complete list of all generated documents, and a detailed list of all development sprints.
--   **How it works**: The application uses the Gemini API to intelligently parse all your generated documentation and extract the key project management data into a clean, machine-readable format.
--   **Value**: This file is an accelerator for project management. You can use it to:
-    -   Quickly import tasks and sprints into tools like Jira, Asana, or Trello.
-    -   Provide a high-level summary for executive briefings.
-    -   Automate the creation of project tracking dashboards.
-
-### C) Vibe Prompts (AI Code Generation)
+### B) Vibe Prompts (AI Code Generation)
 
 The term "vibe prompt" refers to a highly detailed, context-rich prompt that is designed to be given to another AI model, specifically one that generates code (like a "vibe code IDE"). These prompts act as a bridge between your detailed engineering design and the actual implementation.
 

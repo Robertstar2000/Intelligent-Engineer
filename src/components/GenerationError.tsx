@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 
-export const GenerationError = ({ message }) => (
+export const GenerationError = ({ message }: { message: string }) => (
     <div className="bg-red-50 border border-red-200 rounded-lg p-4 dark:bg-red-900/20 dark:border-red-500/30">
         <div className="flex items-center">
             <div className="flex-shrink-0">

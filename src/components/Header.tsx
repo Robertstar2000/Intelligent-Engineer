@@ -1,15 +1,16 @@
 import React from 'react';
 import { BrainCircuit } from 'lucide-react';
+import { Button } from './ui';
 
-export const Header = () => {
-  const navLinks = ["Overview", "Features", "Pricing", "Contact"];
+export const Header = ({ onLoginClick }) => {
+  const navLinks = ["Features", "Lifecycle", "About"];
 
   return (
-    <header className="py-4 px-8 md:px-16">
+    <header className="py-4 px-8 md:px-16 bg-charcoal-900/50 backdrop-blur-sm sticky top-0 z-40">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <BrainCircuit className="w-8 h-8 text-cyan-400" />
-          <span className="text-xl font-bold text-white">Intelligent Engineering</span>
+          <BrainCircuit className="w-8 h-8 text-brand-primary" />
+          <span className="text-xl font-bold text-white">Intelligent Engineer</span>
         </div>
         <nav className="hidden md:flex items-center gap-6">
           {navLinks.map(link => (
@@ -18,12 +19,12 @@ export const Header = () => {
             </a>
           ))}
         </nav>
-        <a
-          href="#"
-          className="hidden md:inline-block bg-cyan-500 text-charcoal-900 font-bold py-2 px-5 rounded-md hover:bg-cyan-600 transition-all"
+        <Button
+          onClick={onLoginClick}
+          variant="primary"
         >
-          Start New Project
-        </a>
+          Login / Sign Up
+        </Button>
       </div>
     </header>
   );

@@ -1,45 +1,130 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { Project } from '../types';
+import { Project, User } from '../types';
 
 interface ProjectContextType {
     project: Project | null;
-    // FIX: Changed setProject type to allow functional updates, which is standard for useState setters, resolving the type error in index.tsx.
     setProject: React.Dispatch<React.SetStateAction<Project | null>>;
+    projects: Project[];
+    setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+    currentUser: User | null;
+    // FIX: Exposed setCurrentUser to allow components to change the active user.
+    setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+    theme: string;
+    setTheme: (theme: string) => void;
+    updateProject: (updatedProject: Project) => void;
+    login: (email: string, pass: string) => boolean;
+    signup: (name: string, email: string, pass: string) => boolean;
+    logout: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export const ProjectProvider = ({ children }: { children: ReactNode }) => {
-    const [project, setProject] = useState<Project | null>(() => {
-        try {
-            if (typeof window === 'undefined') return null;
-            const savedProject = localStorage.getItem('currentProject');
-            return savedProject ? JSON.parse(savedProject) : null;
-        } catch (error) {
-            console.error('Failed to load project from localStorage', error);
-            return null;
-        }
-    });
+interface ProjectProviderProps {
+    children?: ReactNode;
+    theme: string;
+    setTheme: (theme: string) => void;
+}
 
-    // FIX: Replaced custom setProject wrapper with useEffect to handle localStorage persistence.
-    // This is the correct React pattern for managing side effects and allows setProject to be
-    // passed directly from useState, enabling functional updates.
+export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderProps) => {
+    const [project, setProject] = useState<Project | null>(null);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    // Load current user from session storage on initial load
     useEffect(() => {
         try {
-            if (typeof window !== 'undefined') {
-                if (project) {
-                    localStorage.setItem('currentProject', JSON.stringify(project));
-                } else {
-                    localStorage.removeItem('currentProject');
-                }
+            const savedUser = sessionStorage.getItem('currentUser');
+            if (savedUser) {
+                setCurrentUser(JSON.parse(savedUser));
             }
         } catch (error) {
-            console.error('Failed to save project to localStorage', error);
+            setCurrentUser(null);
         }
-    }, [project]);
+    }, []);
+
+    // Load projects when currentUser changes
+    useEffect(() => {
+        if (typeof window !== 'undefined' && currentUser) {
+            try {
+                const savedProjects = localStorage.getItem(`projects_${currentUser.id}`);
+                setProjects(savedProjects ? JSON.parse(savedProjects) : []);
+                sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+            } catch (error) {
+                setProjects([]);
+            }
+        } else {
+            setProjects([]);
+            sessionStorage.removeItem('currentUser');
+        }
+    }, [currentUser]);
+
+    // Save projects when they change
+    useEffect(() => {
+        if (typeof window !== 'undefined' && currentUser) {
+            try {
+                localStorage.setItem(`projects_${currentUser.id}`, JSON.stringify(projects));
+            } catch (error) {
+                // handle error
+            }
+        }
+    }, [projects, currentUser]);
+
+    const updateProject = (updatedProject: Project) => {
+        setProjects(prevProjects => 
+            prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
+        );
+        if (project && project.id === updatedProject.id) {
+            setProject(updatedProject);
+        }
+    };
+
+    const login = (email: string, pass: string): boolean => {
+        const users: User[] = JSON.parse(localStorage.getItem('intelligent_engineer_users') || '[]');
+        const user = users.find(u => u.email === email);
+        // This is a mock password check. In a real app, this would be a hashed password check.
+        if (user) {
+            setCurrentUser(user);
+            return true;
+        }
+        return false;
+    };
+
+    const signup = (name: string, email: string, pass: string): boolean => {
+        let users: User[] = JSON.parse(localStorage.getItem('intelligent_engineer_users') || '[]');
+        if (users.some(u => u.email === email)) {
+            return false; // User already exists
+        }
+        const newUser: User = { 
+            id: `user-${Date.now()}`, 
+            name, 
+            email, 
+            role: 'Engineer', 
+            avatar: '👤' 
+        };
+        users.push(newUser);
+        localStorage.setItem('intelligent_engineer_users', JSON.stringify(users));
+        setCurrentUser(newUser);
+        return true;
+    };
+
+    const logout = () => {
+        setCurrentUser(null);
+        setProject(null);
+        sessionStorage.removeItem('currentUser');
+    };
+
 
     return (
-        <ProjectContext.Provider value={{ project, setProject }}>
+        <ProjectContext.Provider value={{ 
+            project, setProject, 
+            projects, setProjects,
+            currentUser,
+            // FIX: Added setCurrentUser to the provider value.
+            setCurrentUser,
+            theme, setTheme,
+            updateProject,
+            login, signup, logout
+        }}>
             {children}
         </ProjectContext.Provider>
     );

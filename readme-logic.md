@@ -1,3 +1,4 @@
+
 # Application Logic Outline
 
 This document outlines the logical flow of the Intelligent Engineering Partner application in a human-readable format. Indentation is used to represent nesting, loops, and conditional branches.
@@ -139,15 +140,15 @@ This is the most complex component, with logic that adapts based on the current 
 
 ### Notes: Problems & Potential Improvements
 
--   **Problems**:
-    -   **State Management Complexity**: The application relies heavily on prop drilling (passing state and callbacks down through many component layers). This makes maintenance difficult and error-prone.
-    -   **Component Monoliths**: `PhaseView.tsx` is a very large component that handles the logic for all phase types. This violates the single-responsibility principle and makes the code hard to read and test.
-    -   **Lack of Persistence**: All project data is stored in memory. If the user refreshes the browser tab, all their work is lost.
-    -   **Outdated Help Content**: The `helpContent.ts` file describes a complex UI for managing API keys that no longer exists in the code, which now uses a simpler environment variable approach. This can confuse users.
+-   **Completed Tasks**:
+    -   **[DONE] State Management Complexity**: Mitigated by adopting React's Context API (`ProjectContext`) to provide project state globally, reducing prop drilling.
+    -   **[DONE] Component Monoliths**: `PhaseView.tsx` has been refactored into a router that renders smaller, specialized workflow components (`StandardPhaseWorkflow`, `MultiDocPhaseWorkflow`, etc.), improving separation of concerns.
+    -   **[DONE] Lack of Persistence**: Implemented `localStorage` via `ProjectContext` to save the `currentProject` state, allowing users to resume work after a browser refresh.
+    -   **[DONE] Outdated Help Content**: The `helpContent.ts` file has been updated to accurately reflect the current, simplified API key handling mechanism.
+    -   **[DONE] Abstract API Logic**: A dedicated service module (`src/services/geminiService.ts`) has been created to centralize all prompt construction and API calls, cleaning up components.
 
--   **Potential Improvements**:
-    -   **Adopt a State Manager**: Integrate a state management library (like Zustand, Redux) or use React's Context API more robustly. This would create a central store for the `currentProject` object, eliminating prop drilling.
-    -   **Refactor `PhaseView`**: Break down the monolithic `PhaseView` into smaller, specialized components for each workflow (e.g., `<MultiDocPhaseView>`, `<CriticalDesignPhaseView>`). A parent component could then act as a router, rendering the correct view based on the phase's configuration.
-    -   **Implement Local Storage**: Use the browser's `localStorage` or `IndexedDB` to automatically save the `currentProject` object whenever it changes. This would provide persistence and allow users to resume their work after a refresh.
-    -   **Abstract API Logic**: Create a dedicated service module (e.g., `src/services/geminiService.ts`) to handle all prompt construction and API calls. This would clean up the components and centralize the interaction with the Gemini API.
-    -   **Update Documentation**: Revise `helpContent.ts` to accurately reflect the current, simplified API key handling mechanism.
+-   **Potential Future Improvements**:
+    -   **More Robust State Manager**: For even more complex state interactions, a library like Zustand could be considered to further simplify state updates and selectors.
+    -   **Error Boundaries**: Implement React Error Boundaries to gracefully handle rendering errors in components without crashing the entire application.
+    -   **Unit & Integration Testing**: Add a testing framework like Jest and React Testing Library to write tests for key components and service functions, improving application stability.
+    -   **UI/UX Enhancements**: Add more loading indicators, optimistic UI updates, and smoother transitions to improve the user experience during long-running AI generation tasks.

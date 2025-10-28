@@ -1,6 +1,8 @@
 import React from 'react';
+import { Button } from './ui';
+import { GitBranch, FileText, CheckSquare } from 'lucide-react';
 
-export const Hero = () => {
+export const Hero = ({ onLoginClick }) => {
   return (
     <section className="py-20 md:py-32 text-center">
       <div className="container mx-auto px-4">
@@ -8,14 +10,35 @@ export const Hero = () => {
           Intelligent Engineering
         </h1>
         <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-8">
-          An AI-powered companion that guides you through the full lifecycle of engineering development.
+          An AI-powered companion that guides you through the full lifecycle of engineering development, from initial concept to final launch. Streamline documentation, automate workflows, and collaborate with an intelligent partner every step of the way.
         </p>
-        <a
-          href="#"
-          className="bg-cyan-500 text-charcoal-900 font-bold py-3 px-8 rounded-md hover:bg-cyan-600 transition-all text-lg"
+
+        <div className="mt-12 mb-10 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="flex flex-col items-center text-center">
+                <GitBranch className="w-10 h-10 text-brand-primary mb-3" />
+                <h3 className="font-semibold text-white text-lg">Structured Lifecycle</h3>
+                <p className="text-sm text-gray-400 mt-1">Follow proven engineering phases from requirements to launch.</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+                <FileText className="w-10 h-10 text-brand-primary mb-3" />
+                <h3 className="font-semibold text-white text-lg">AI-Generated Documents</h3>
+                <p className="text-sm text-gray-400 mt-1">Automate SOWs, technical specs, test plans, and more.</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+                <CheckSquare className="w-10 h-10 text-brand-primary mb-3" />
+                <h3 className="font-semibold text-white text-lg">Best-Practice Workflows</h3>
+                <p className="text-sm text-gray-400 mt-1">Integrated FMEA, trade studies, and formal design reviews.</p>
+            </div>
+        </div>
+
+         <Button
+          onClick={onLoginClick}
+          variant="primary"
+          size="lg"
+          className="mt-8"
         >
           Start New Project
-        </a>
+        </Button>
       </div>
     </section>
   );
