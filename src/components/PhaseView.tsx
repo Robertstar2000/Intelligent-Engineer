@@ -15,30 +15,35 @@ import { CommentsThread } from './CommentsThread';
 
 interface PhaseViewProps {
     phase: Phase;
-    onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
     onPhaseComplete: () => void;
-    onAddComment: (phaseId: string, text: string) => void;
     onReturnToDashboard: () => void;
-    onUpdateProject: (updatedProject: Project) => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPhaseComplete, onAddComment, onReturnToDashboard, onUpdateProject, setToast }) => {
+export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, onReturnToDashboard, setToast }) => {
     const [localPhase, setLocalPhase] = useState<Phase>(phase);
     const [generationError, setGenerationError] = useState('');
-    const { project, currentUser } = useProject();
+    const { project, currentUser, updatePhase, addComment, updateProject } = useProject();
     
     useEffect(() => {
         setLocalPhase(phase);
     }, [phase]);
 
     if (!project || !currentUser) return null;
+    
+    const handleUpdatePhase = (phaseId: string, updates: Partial<Phase>) => {
+        updatePhase(project.id, phaseId, updates);
+    };
+    
+    const handleAddComment = (phaseId: string, text: string) => {
+        addComment(project.id, phaseId, text);
+    };
 
     const renderWorkflow = () => {
         if (localPhase.status === 'in-review') {
             return <DesignReviewWorkflow 
                         phase={localPhase}
-                        onUpdatePhase={onUpdatePhase}
+                        onUpdatePhase={handleUpdatePhase}
                         onPhaseComplete={onPhaseComplete} 
                    />;
         }
@@ -47,11 +52,11 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
             return <MultiDocPhaseWorkflow 
                         phase={localPhase}
                         project={project}
-                        onUpdatePhase={onUpdatePhase}
+                        onUpdatePhase={handleUpdatePhase}
                         onPhaseComplete={onPhaseComplete}
                         setExternalError={setGenerationError}
                         onGoToNext={onReturnToDashboard}
-                        onUpdateProject={onUpdateProject}
+                        onUpdateProject={updateProject}
                         setToast={setToast}
                    />;
         }
@@ -60,11 +65,11 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
             return <CriticalDesignPhaseWorkflow
                         phase={localPhase}
                         project={project}
-                        onUpdatePhase={onUpdatePhase}
+                        onUpdatePhase={handleUpdatePhase}
                         onPhaseComplete={onPhaseComplete}
                         setExternalError={setGenerationError}
                         onGoToNext={onReturnToDashboard}
-                        onUpdateProject={onUpdateProject}
+                        onUpdateProject={updateProject}
                         setToast={setToast}
                     />;
         }
@@ -73,7 +78,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
         return <StandardPhaseWorkflow
                     phase={localPhase}
                     project={project}
-                    onUpdatePhase={onUpdatePhase}
+                    onUpdatePhase={handleUpdatePhase}
                     onPhaseComplete={onPhaseComplete}
                     setExternalError={setGenerationError}
                     onGoToNext={onReturnToDashboard}
@@ -87,7 +92,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
             <PhaseHeader 
                 phase={localPhase} 
                 disciplines={project.disciplines}
-                onUpdatePhase={onUpdatePhase} 
+                onUpdatePhase={handleUpdatePhase} 
             />
             {!process.env.API_KEY && <ApiKeyWarning />}
             {generationError && <GenerationError message={generationError} />}
@@ -96,7 +101,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
             {localPhase.output && localPhase.status !== 'in-review' && (
                 <DiagramCard 
                     phase={localPhase}
-                    onUpdatePhase={onUpdatePhase}
+                    onUpdatePhase={handleUpdatePhase}
                     setExternalError={setGenerationError}
                 />
             )}
@@ -106,7 +111,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
                     comments={phaseComments}
                     users={project.users}
                     currentUser={currentUser}
-                    onAddComment={(text) => onAddComment(localPhase.id, text)}
+                    onAddComment={(text) => handleAddComment(localPhase.id, text)}
                 />
             )}
         </div>

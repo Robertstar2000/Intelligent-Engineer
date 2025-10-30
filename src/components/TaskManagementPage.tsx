@@ -11,12 +11,11 @@ const md = new Remarkable({ html: true });
 
 interface AddTaskModalProps {
     onClose: () => void;
-    onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask, setToast }) => {
-    const { project } = useProject();
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, setToast }) => {
+    const { project, addTask } = useProject();
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -54,8 +53,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask, setToas
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (title && phaseId) {
-            onAddTask({
+        if (title && phaseId && project) {
+            addTask(project.id, {
                 title,
                 description,
                 status: 'todo',
@@ -65,6 +64,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask, setToas
                 priority,
                 dueDate: dueDate || undefined,
             });
+            setToast({ message: 'Task added successfully!', type: 'success' });
             onClose();
         }
     };
@@ -136,11 +136,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask, setToas
 
 interface TaskCardProps {
     task: Task;
-    onUpdateTask: (task: Task) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateTask }) => {
-    const { project } = useProject();
+const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+    const { project, updateTask } = useProject();
     const assignee = project?.users.find(u => u.id === task.assigneeId);
     const phase = project?.phases.find(p => p.id === task.phaseId);
 
@@ -149,6 +148,12 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateTask }) => {
         Medium: 'border-l-4 border-brand-yellow',
         Low: 'border-l-4 border-brand-primary',
     };
+    
+    const handleStatusChange = (newStatus: Task['status']) => {
+        if (project) {
+            updateTask(project.id, { ...task, status: newStatus });
+        }
+    };
 
     return (
         <Card className={`p-4 space-y-2 ${priorityStyles[task.priority || 'Medium']}`}>
@@ -156,7 +161,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateTask }) => {
                 <h4 className="font-semibold text-gray-900 dark:text-white leading-tight">{task.title}</h4>
                 <select 
                     value={task.status} 
-                    onChange={e => onUpdateTask({...task, status: e.target.value as Task['status']})}
+                    onChange={e => handleStatusChange(e.target.value as Task['status'])}
                     className="text-xs border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600"
                 >
                     <option value="todo">To Do</option>
@@ -185,11 +190,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateTask }) => {
 interface TaskManagementPageProps {
   onBack: () => void;
   setToast: (toast: ToastMessage | null) => void;
-  onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
-  onUpdateTask: (task: Task) => void;
 }
 
-export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, setToast, onAddTask, onUpdateTask }) => {
+export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, setToast }) => {
     const { project, theme, setTheme, updateProject } = useProject();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -269,13 +272,13 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, 
                         <h3 className="font-semibold mb-4">{col.title} ({tasks.filter(t => t.status === col.status).length})</h3>
                         <div className="space-y-4">
                             {tasks.filter(t => t.status === col.status).map(task => (
-                                <TaskCard key={task.id} task={task} onUpdateTask={onUpdateTask} />
+                                <TaskCard key={task.id} task={task} />
                             ))}
                         </div>
                     </div>
                 ))}
             </div>
-            {isModalOpen && <AddTaskModal onClose={() => setIsModalOpen(false)} onAddTask={onAddTask} setToast={setToast}/>}
+            {isModalOpen && <AddTaskModal onClose={() => setIsModalOpen(false)} setToast={setToast}/>}
         </div>
     );
 };

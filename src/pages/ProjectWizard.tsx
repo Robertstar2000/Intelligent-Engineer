@@ -11,7 +11,7 @@ interface ProjectWizardProps {
   onCancel: () => void;
 }
 export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
-  const { currentUser } = useProject();
+  const { currentUser, addProject } = useProject();
   const [step, setStep] = useState(1);
   const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[] });
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,7 +31,7 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   
   const createProject = () => {
     if (!currentUser) return; // Should not happen if this component is rendered
-    onProjectCreated({
+    const newProject: Project = {
       id: Date.now().toString(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
       compactedContext: '',
       metaDocuments: [],
@@ -68,7 +68,9 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
         { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: true, designReview: { required: false, checklist: [] } },
         { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: true, designReview: { required: false, checklist: [] } }
       ]
-    });
+    };
+    addProject(newProject);
+    onProjectCreated(newProject);
   };
 
   const nextStep = () => setStep(s => s + 1);

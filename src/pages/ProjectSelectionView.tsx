@@ -6,12 +6,13 @@ import { useProject } from '../context/ProjectContext';
 import { Project } from '../types';
 
 export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setTheme }) => {
-    const { currentUser, projects, setProjects, logout } = useProject();
+    // FIX: Use the new deleteProject function instead of setProjects.
+    const { currentUser, projects, logout, deleteProject } = useProject();
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
     const handleDeleteProject = () => {
         if (!projectToDelete) return;
-        setProjects(projects.filter(p => p.id !== projectToDelete.id));
+        deleteProject(projectToDelete.id);
         setProjectToDelete(null);
     }
 

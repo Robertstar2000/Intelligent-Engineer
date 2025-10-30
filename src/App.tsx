@@ -27,8 +27,9 @@ import { ProjectHeader } from './components/ProjectHeader';
 export const App = () => {
     const { 
         project: currentProject, 
-        setProject: setCurrentProject, 
+        setProject: setCurrentProject,
         updateProject,
+        updatePhase,
         theme,
         setTheme,
         currentUser
@@ -67,33 +68,14 @@ export const App = () => {
 
     const handleCreateNew = () => setCurrentView('wizard');
 
-    const handleProjectCreated = (project: Project) => {
-        updateProject(project);
-        setCurrentProject(project);
-        setCurrentView('dashboard');
-    };
-
     const handleExitProject = () => {
         setCurrentProject(null);
         setCurrentView('projectSelection');
     };
     
-    const handleUpdateProjectDetails = (updates: { requirements: string, constraints: string }) => {
-        if (!currentProject) return;
-        const updated = { ...currentProject, ...updates };
-        updateProject(updated);
-        setToast({ message: 'Project details updated!', type: 'success' });
-    };
-
     const handleSelectPhase = (index: number) => {
         setSelectedPhaseIndex(index);
         setCurrentView('phase');
-    };
-    
-    const handleUpdatePhase = (phaseId: string, updates: Partial<Phase>) => {
-        if (!currentProject) return;
-        const updatedPhases = currentProject.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
-        updateProject({ ...currentProject, phases: updatedPhases });
     };
 
     const handlePhaseComplete = () => {
@@ -103,40 +85,10 @@ export const App = () => {
         const isReviewRequired = currentPhase.designReview?.required && currentPhase.status !== 'in-review';
         
         if (!isReviewRequired) {
-             const updatedPhases = currentProject.phases.map((p, index): Phase => 
-                index === selectedPhaseIndex ? { ...p, status: 'completed' } : p
-            );
-             updateProject({ ...currentProject, phases: updatedPhases });
+            updatePhase(currentProject.id, currentPhase.id, { status: 'completed' });
         }
         
         setToast({ message: `${currentPhase.name} phase updated.`, type: 'success' });
-    };
-    
-    const handleAddComment = (phaseId: string, text: string) => {
-        if (!currentProject || !currentProject.users[0]) return;
-        const newComment: Comment = {
-            id: `comment-${Date.now()}`,
-            userId: currentProject.users[0].id,
-            phaseId, text, createdAt: new Date()
-        };
-        const updatedComments = { ...currentProject.comments };
-        if (!updatedComments[phaseId]) updatedComments[phaseId] = [];
-        updatedComments[phaseId].push(newComment);
-        updateProject({ ...currentProject, comments: updatedComments });
-    };
-    
-    const handleAddTask = (task: Omit<Task, 'id' | 'createdAt'>) => {
-        if (!currentProject) return;
-        const newTask: Task = { ...task, id: `task-${Date.now()}`, createdAt: new Date() };
-        const updatedTasks = [...(currentProject.tasks || []), newTask];
-        updateProject({ ...currentProject, tasks: updatedTasks });
-        setToast({ message: 'Task added successfully!', type: 'success' });
-    };
-    
-    const handleUpdateTask = (updatedTask: Task) => {
-        if (!currentProject) return;
-        const updatedTasks = (currentProject.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
-        updateProject({ ...currentProject, tasks: updatedTasks });
     };
 
     const handleAutomateProject = async () => {
@@ -200,7 +152,7 @@ export const App = () => {
             return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} />;
         }
         if (currentView === 'wizard') {
-            return <ProjectWizard onProjectCreated={handleProjectCreated} onCancel={() => setCurrentView('projectSelection')} />;
+            return <ProjectWizard onProjectCreated={(p) => { setCurrentProject(p); setCurrentView('dashboard'); }} onCancel={() => setCurrentView('projectSelection')} />;
         }
 
         if (!currentProject) {
@@ -212,7 +164,6 @@ export const App = () => {
                 return <Dashboard 
                     onSelectPhase={handleSelectPhase}
                     onExitProject={handleExitProject}
-                    onUpdateProjectDetails={handleUpdateProjectDetails}
                     isAutomating={isAutomating}
                     automatingPhaseId={automatingPhaseId}
                     onRunAutomation={handleAutomateProject}
@@ -236,11 +187,8 @@ export const App = () => {
                         <ProjectHeader onGoHome={() => setCurrentView('dashboard')} theme={theme} setTheme={setTheme} showBackButton/>
                         <PhaseView 
                             phase={phase}
-                            onUpdatePhase={handleUpdatePhase}
                             onPhaseComplete={handlePhaseComplete}
-                            onAddComment={handleAddComment}
                             onReturnToDashboard={() => setCurrentView('dashboard')}
-                            onUpdateProject={updateProject}
                             setToast={setToast}
                         />
                     </div>
@@ -252,7 +200,7 @@ export const App = () => {
             case 'team':
                 return <TeamManagementPage onBack={() => setCurrentView('dashboard')} setToast={setToast}/>;
             case 'tasks':
-                return <TaskManagementPage onBack={() => setCurrentView('dashboard')} setToast={setToast} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} />;
+                return <TaskManagementPage onBack={() => setCurrentView('dashboard')} setToast={setToast} />;
             case 'integrations':
                 return <IntegrationsPage onBack={() => setCurrentView('dashboard')} />;
             default:

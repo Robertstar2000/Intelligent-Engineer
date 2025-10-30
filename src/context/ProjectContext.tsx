@@ -1,19 +1,29 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { Project, User } from '../types';
+import { Project, User, Phase, Comment, Task } from '../types';
 
 interface ProjectContextType {
     project: Project | null;
     setProject: React.Dispatch<React.SetStateAction<Project | null>>;
     projects: Project[];
-    setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
     currentUser: User | null;
     setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
     theme: string;
     setTheme: (theme: string) => void;
-    updateProject: (updatedProject: Project) => void;
+    
+    // Auth & Project list management
     login: (email: string, pass: string) => boolean;
     signup: (name: string, email: string, pass: string) => boolean;
     logout: () => void;
+    
+    // Project lifecycle management
+    updateProject: (updatedProject: Project) => void;
+    addProject: (newProject: Project) => void;
+    deleteProject: (projectId: string) => void;
+    updateProjectDetails: (projectId: string, updates: { requirements: string, constraints: string }) => void;
+    updatePhase: (projectId: string, phaseId: string, updates: Partial<Phase>) => void;
+    addComment: (projectId: string, phaseId: string, text: string) => void;
+    addTask: (projectId: string, task: Omit<Task, 'id' | 'createdAt'>) => void;
+    updateTask: (projectId: string, updatedTask: Task) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -82,6 +92,80 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
         }
     };
 
+    const addProject = (newProject: Project) => {
+        setProjects(prev => [...prev, newProject]);
+    };
+
+    const deleteProject = (projectId: string) => {
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        if (project?.id === projectId) {
+            setProject(null);
+        }
+    };
+
+    const updateProjectDetails = (projectId: string, updates: { requirements: string, constraints: string }) => {
+        const updateFn = (p: Project) => p.id === projectId ? { ...p, ...updates } : p;
+        setProjects(prev => prev.map(updateFn));
+        if (project?.id === projectId) setProject(p => p ? updateFn(p) : null);
+    };
+
+    const updatePhase = (projectId: string, phaseId: string, updates: Partial<Phase>) => {
+        const updateFn = (p: Project) => {
+            if (p.id === projectId) {
+                const updatedPhases = p.phases.map(ph => ph.id === phaseId ? { ...ph, ...updates } : ph);
+                return { ...p, phases: updatedPhases };
+            }
+            return p;
+        };
+        setProjects(prev => prev.map(updateFn));
+        if (project?.id === projectId) setProject(p => p ? updateFn(p) : null);
+    };
+
+    const addComment = (projectId: string, phaseId: string, text: string) => {
+        if (!currentUser) return;
+        const newComment: Comment = {
+            id: `comment-${Date.now()}`,
+            userId: currentUser.id,
+            phaseId, text, createdAt: new Date()
+        };
+        const updateFn = (p: Project) => {
+            if (p.id === projectId) {
+                const updatedComments = { ...p.comments };
+                if (!updatedComments[phaseId]) updatedComments[phaseId] = [];
+                updatedComments[phaseId].push(newComment);
+                return { ...p, comments: updatedComments };
+            }
+            return p;
+        };
+        setProjects(prev => prev.map(updateFn));
+        if (project?.id === projectId) setProject(p => p ? updateFn(p) : null);
+    };
+
+    const addTask = (projectId: string, task: Omit<Task, 'id' | 'createdAt'>) => {
+         const newTask: Task = { ...task, id: `task-${Date.now()}`, createdAt: new Date() };
+         const updateFn = (p: Project) => {
+            if (p.id === projectId) {
+                const updatedTasks = [...(p.tasks || []), newTask];
+                return { ...p, tasks: updatedTasks };
+            }
+            return p;
+         };
+         setProjects(prev => prev.map(updateFn));
+         if (project?.id === projectId) setProject(p => p ? updateFn(p) : null);
+    };
+
+    const updateTask = (projectId: string, updatedTask: Task) => {
+        const updateFn = (p: Project) => {
+            if (p.id === projectId) {
+                const updatedTasks = (p.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
+                return { ...p, tasks: updatedTasks };
+            }
+            return p;
+         };
+        setProjects(prev => prev.map(updateFn));
+        if (project?.id === projectId) setProject(p => p ? updateFn(p) : null);
+    };
+
     const login = (email: string, pass: string): boolean => {
         const users: User[] = JSON.parse(localStorage.getItem('intelligent_engineer_users') || '[]');
         const user = users.find(u => u.email === email);
@@ -121,12 +205,12 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     return (
         <ProjectContext.Provider value={{ 
             project, setProject, 
-            projects, setProjects,
+            projects,
             currentUser,
             setCurrentUser,
             theme, setTheme,
-            updateProject,
-            login, signup, logout
+            login, signup, logout,
+            updateProject, addProject, deleteProject, updateProjectDetails, updatePhase, addComment, addTask, updateTask
         }}>
             {children}
         </ProjectContext.Provider>

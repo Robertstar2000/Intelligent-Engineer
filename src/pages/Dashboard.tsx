@@ -16,7 +16,6 @@ interface DashboardProps {
   onViewTasks: () => void;
   onViewIntegrations: () => void;
   onExitProject: () => void;
-  onUpdateProjectDetails: (updates: { requirements: string, constraints: string }) => void;
   isAutomating: boolean;
   automatingPhaseId: string | null;
   onRunAutomation: () => void;
@@ -24,8 +23,8 @@ interface DashboardProps {
   isCollaborationPanelOpen: boolean;
   setToast: (toast: ToastMessage | null) => void;
 }
-export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, onUpdateProjectDetails, isAutomating, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
-  const { project, theme, setTheme } = useProject();
+export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, isAutomating, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
+  const { project, theme, setTheme, updateProjectDetails } = useProject();
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
   const [editedConstraints, setEditedConstraints] = useState(project?.constraints || '');
@@ -33,7 +32,8 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
   if (!project) return null;
 
   const handleSaveDetails = () => {
-    onUpdateProjectDetails({ requirements: editedRequirements, constraints: editedConstraints });
+    updateProjectDetails(project.id, { requirements: editedRequirements, constraints: editedConstraints });
+    setToast({ message: 'Project details updated!', type: 'success' });
     setIsEditingDetails(false);
   };
 
@@ -65,6 +65,21 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
         <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">Created on: {new Date(project.createdAt).toLocaleDateString()}</p>
+        </div>
+
+        <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 dark:bg-yellow-900/20 dark:border-yellow-500">
+            <div className="flex">
+                <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                </div>
+                <div className="ml-3">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                        Be sure to read and edit AI output to keep the project aligned with your needs. Depending on project complexity, agentic AI generation can take several minutes per step—please be patient.
+                    </p>
+                </div>
+            </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
