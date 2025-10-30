@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Eye, X, Edit3, Save, Image as ImageIcon } from 'lucide-react';
+import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { Project, Phase, ToastMessage, MetaDocument, Message } from '../types';
@@ -11,7 +11,15 @@ import { MarkdownEditor } from './MarkdownEditor';
 declare const JSZip: any;
 declare const Prism: any;
 
-const md = new Remarkable({ html: true });
+const md = new Remarkable({
+    html: true, typographer: true,
+    highlight: function (str, lang) {
+        if (lang && typeof Prism !== 'undefined' && Prism.languages[lang]) {
+            try { return Prism.highlight(str, Prism.languages[lang], lang); } catch (e) { console.error(e) }
+        }
+        return '';
+    },
+});
 
 const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9_.]/gi, '_').toLowerCase();
 
@@ -29,6 +37,7 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
     const [editedContent, setEditedContent] = useState('');
     
     const isVisualAsset = document && ['diagram', 'wireframe', 'schematic'].includes(document.type);
+    const isReadOnly = document && document.type === 'Chat Log';
 
     useEffect(() => {
         if (isOpen && document) {
@@ -61,7 +70,7 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
                 <div className="flex items-center justify-between p-4 border-b dark:border-charcoal-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">{document.name}</h2>
                     <div className="flex items-center space-x-2">
-                        {!isVisualAsset && (
+                        {!isVisualAsset && !isReadOnly && (
                             isEditing ? (
                                 <Button size="sm" onClick={handleSave}><Save className="w-4 h-4 mr-2" />Save</Button>
                             ) : (
@@ -95,49 +104,39 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
 
 const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const isVisualAsset = ['diagram', 'wireframe', 'schematic'].includes(documentType);
+    const isVisualAsset = ['Diagram', '3D Wireframe', 'Schematic'].includes(documentType);
 
     const handleDownload = (format: 'md' | 'txt' | 'doc' | 'pdf' | 'png') => {
         if (isVisualAsset) {
             downloadFile(`${sanitizeFilename(documentName)}.png`, documentContent, 'image/png');
         } else {
              const filename = `${sanitizeFilename(documentName)}.${format}`;
-            const blob = new Blob([documentContent], { type: 'text/markdown' });
-            const url = URL.createObjectURL(blob);
-
-            if (format === 'md') {
-                downloadFile(filename, url, 'text/markdown');
-            } else if (format === 'txt') {
-                 const textContent = documentContent
-                    .replace(/#+\s/g, '')
-                    .replace(/(\*\*|__)(.*?)\1/g, '$2')
-                    .replace(/(\*|_)(.*?)\1/g, '$2')
-                    .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
-                    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-                    .replace(/!\[(.*?)\]\(.*?\)/g, '');
-                const textBlob = new Blob([textContent], { type: 'text/plain' });
-                downloadFile(filename, URL.createObjectURL(textBlob), 'text/plain');
-            } else if (format === 'doc') {
-                const htmlContent = md.render(documentContent);
-                const docContent = `
-                <!DOCTYPE html><html><head><meta charset="utf-8"><title>${documentName}</title></head>
-                <body>${htmlContent}</body></html>`;
-                const docBlob = new Blob([docContent], { type: 'application/msword' });
-                downloadFile(filename, URL.createObjectURL(docBlob), 'application/msword');
-            } else if (format === 'pdf') {
+            
+            if (format === 'pdf') {
                 const htmlContent = md.render(documentContent);
                 const printWindow = window.open('', '_blank');
+                if (!printWindow) return;
                 printWindow.document.write(`
                     <html><head><title>Print - ${documentName}</title>
                     <style>
                         body { font-family: sans-serif; line-height: 1.6; }
-                        pre, code { white-space: pre-wrap; background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+                        pre, code { white-space: pre-wrap; word-wrap: break-word; background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
                         .prose { max-width: 800px; margin: 0 auto; }
                     </style>
                     </head><body><div class="prose">${htmlContent}</div></body></html>`);
                 printWindow.document.close();
                 printWindow.focus();
                 printWindow.print();
+            } else {
+                 let blob;
+                if(format === 'doc') {
+                    const htmlContent = md.render(documentContent);
+                    const docContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${documentName}</title></head><body>${htmlContent}</body></html>`;
+                    blob = new Blob([docContent], { type: 'application/msword' });
+                } else {
+                    blob = new Blob([documentContent], { type: 'text/markdown' });
+                }
+                downloadFile(filename, URL.createObjectURL(blob), blob.type);
             }
         }
 
@@ -163,7 +162,7 @@ const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
                                 <button onClick={() => handleDownload('md')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Markdown (.md)</button>
                                 <button onClick={() => handleDownload('txt')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Plain Text (.txt)</button>
                                 <button onClick={() => handleDownload('doc')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Word (.doc)</button>
-                                <button onClick={() => handleDownload('pdf')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">PDF (.pdf)</button>
+                                <button onClick={() => handleDownload('pdf')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">PDF</button>
                             </>
                         )}
                     </div>
@@ -343,7 +342,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 if (type === 'phase' && phase.id === id) {
                     return { ...phase, output: newContent };
                 }
-                 if (type === 'chat' && phase.id === id) {
+                 if (docId.startsWith('chat-phase-') && phase.id === id) {
                     setToast({ message: "Chat logs are read-only.", type: "info" });
                     return phase;
                 }
@@ -354,7 +353,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                     updatedSprints[sprintIndex] = { ...updatedSprints[sprintIndex], output: newContent };
                     return { ...phase, sprints: updatedSprints };
                 }
-                 if (type === 'chat' && sprintIndex > -1) {
+                 if (docId.startsWith('chat-sprint-') && sprintIndex > -1) {
                     setToast({ message: "Chat logs are read-only.", type: "info" });
                     return phase;
                 }
@@ -364,6 +363,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         }
         updateProject(updatedProject);
         setToast({ message: 'Document updated successfully!', type: 'success' });
+        setEditingDocument(prev => prev ? {...prev, content: newContent } : null);
     };
 
     const allDocuments = [];
@@ -462,7 +462,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 </div>
             </Card>
 
-            <Card title="All Documents" description="Download markdown files for each completed phase and generated artifact.">
+            <Card title="All Documents" description="View, edit, and download markdown files for each completed phase and generated artifact.">
                 <div className="space-y-3">
                     {allDocuments.length > 0 ? allDocuments.map(doc => (
                         <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-charcoal-800/50 rounded-lg">
@@ -476,7 +476,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                             </div>
                              <div className="flex items-center space-x-2 flex-shrink-0">
                                 <Button size="sm" variant="outline" onClick={() => setEditingDocument(doc)}>
-                                    <Edit3 className="mr-2 w-4 h-4" /> View
+                                    <Edit3 className="mr-2 w-4 h-4" /> View / Edit
                                 </Button>
                                 <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={doc.type} />
                             </div>

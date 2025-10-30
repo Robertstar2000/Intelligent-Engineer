@@ -153,7 +153,6 @@ export interface Project {
   metaDocuments?: MetaDocument[];
 }
 
-// FIX: Added 'info' to ToastMessage type to support info toasts and resolve type error.
 export interface ToastMessage {
     message: string;
     type: 'success' | 'error' | 'info';

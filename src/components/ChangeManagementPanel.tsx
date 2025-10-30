@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { Bot, Check, FileText, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
-// FIX: Import ToastMessage type for the setToast prop.
 import { Project, Phase, Sprint, ToastMessage } from '../types';
-// FIX: Import GenerateContentResponse for typing AI responses.
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { withRetry } from '../utils';
 
@@ -40,9 +38,7 @@ const serializeProjectDocs = (project: Project): { id: string, name: string, con
     return docs;
 };
 
-// FIX: Receive setToast as a prop instead of from useProject context to fix type error.
 export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMessage | null) => void }) => {
-    // FIX: Remove setToast from useProject destructuring.
     const { project, updateProject } = useProject();
     const [changeRequest, setChangeRequest] = useState('');
     const [agentStatus, setAgentStatus] = useState<AgentStatus>('idle');
@@ -61,14 +57,12 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             const systemInstruction = "You are an Orchestrator Agent. Your task is to analyze a change request and identify which documents are impacted. Return a JSON array of the document names that need editing.";
             const userPrompt = `Project Context:\n${context}\n\nChange Request: "${changeRequest}"\n\nIdentify the impacted documents.`;
             
-            // FIX: Add generic type to withRetry to ensure correct type inference for the response.
             const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
                 config: { systemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } } }
             }));
             
-            // FIX: Access .text property which is now correctly typed.
             const impactedNames = JSON.parse(response.text);
             const docsToUpdate = allDocs
                 .filter(d => impactedNames.includes(d.name))
@@ -95,9 +89,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             try {
                 const doerSystemInstruction = "You are a Doer Agent. You are an expert technical writer. Your task is to edit a document based on a change request, using the full project context. Return only the complete, updated document text. Do not add any commentary.";
                 const doerUserPrompt = `Full Project Context:\n${fullContext}\n\nDocument to Edit: "${doc.name}"\n---BEGIN DOCUMENT---\n${doc.originalContent}\n---END DOCUMENT---\n\nChange Request: "${changeRequest}"\n\nRewrite the document to incorporate the change.`;
-                // FIX: Add generic type to withRetry to ensure correct type inference for the response.
                 const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }));
-                // FIX: Access .text property which is now correctly typed.
                 const newContent = doerResponse.text;
                 finalDocs[i] = { ...doc, newContent: newContent };
                 setImpactedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, newContent, status: 'validating' } : d));
@@ -105,9 +97,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 // QA AGENT
                 const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
                 const qaUserPrompt = `Change Request: "${changeRequest}"\n\nOriginal Document:\n${doc.originalContent}\n\nNew Document:\n${newContent}\n\nVerify the change.`;
-                // FIX: Add generic type to withRetry to ensure correct type inference for the response.
                 const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }));
-                // FIX: Access .text property which is now correctly typed.
                 const qaResult = JSON.parse(qaResponse.text);
 
                 if (qaResult.approved) {

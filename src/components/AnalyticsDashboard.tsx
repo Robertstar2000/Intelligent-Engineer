@@ -7,7 +7,6 @@ import { AnalyticsMetrics, Recommendation } from '../types';
 import { calculateProjectMetrics } from '../services/analyticsEngine';
 import { generateProjectRecommendations } from '../services/geminiService';
 
-// FIX: Added explicit props type for MetricCard to fix type inference errors when props are optional.
 interface MetricCardProps {
     title: string;
     value: string | number;

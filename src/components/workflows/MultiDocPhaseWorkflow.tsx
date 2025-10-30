@@ -91,7 +91,6 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 const updatedProject = {
                     ...project,
                     compactedContext: compactedContext,
-                    // FIX: Explicitly type the return of map to prevent type widening on 'status' property.
                     phases: project.phases.map((p): Phase =>
                         p.id === phase.id
                         ? { ...p, output: mergedOutput, status: 'in-progress' }

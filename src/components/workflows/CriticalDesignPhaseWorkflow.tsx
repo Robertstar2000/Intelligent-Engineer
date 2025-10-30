@@ -110,7 +110,6 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
         const revertMarker = `\n\n---\n\n### Completed Sprint: ${sprintToRevert.name}\n\n**Technical Specification:**\n\n${sprintToRevert.output}`;
         const updatedOutput = phase.output?.replace(revertMarker, '') || '';
         
-        // FIX: Add explicit type to the map function's return value to prevent type widening.
         const updatedSprints = phase.sprints.map((s): Sprint => 
             s.id === sprintToRevert.id ? { ...s, status: 'not-started', output: '', deliverables: [] } : s
         );

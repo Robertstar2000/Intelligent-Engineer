@@ -7,7 +7,6 @@ interface ProjectContextType {
     projects: Project[];
     setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
     currentUser: User | null;
-    // FIX: Exposed setCurrentUser to allow components to change the active user.
     setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
     theme: string;
     setTheme: (theme: string) => void;
@@ -124,7 +123,6 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
             project, setProject, 
             projects, setProjects,
             currentUser,
-            // FIX: Added setCurrentUser to the provider value.
             setCurrentUser,
             theme, setTheme,
             updateProject,

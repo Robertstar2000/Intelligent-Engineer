@@ -26,8 +26,6 @@ export const Card = ({ children, className = '', title, description, noPadding =
   </div>
 );
 
-// FIX: Update Badge component to accept rest props to fix typing issue with 'key' prop.
-// IMPROVEMENT: Use a more specific type for the variant prop.
 export const Badge = ({ children, variant = 'default', className = '', ...props }: { children?: React.ReactNode, variant?: 'default' | 'success' | 'warning' | 'danger' | 'info', className?: string, [key: string]: any }) => {
   const variants = {
     default: 'bg-gray-100 text-gray-800 dark:bg-charcoal-700 dark:text-gray-200',

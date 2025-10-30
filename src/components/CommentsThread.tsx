@@ -21,7 +21,6 @@ export const CommentsThread: React.FC<CommentsThreadProps> = ({ comments, users,
         }
     };
 
-    // FIX: Add explicit type to parameter to avoid implicit 'any'
     const timeSince = (date: Date) => {
         const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
         let interval = seconds / 31536000;
@@ -45,7 +44,6 @@ export const CommentsThread: React.FC<CommentsThreadProps> = ({ comments, users,
                         <p className="text-center text-gray-500 dark:text-gray-400 py-4">No comments yet. Start the conversation!</p>
                     ) : (
                         [...comments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(comment => {
-                            // FIX: Use Array.find for more reliable type inference to resolve 'unknown' type error on `user`
                             const user = users.find(u => u.id === comment.userId);
                             return (
                                 <div key={comment.id} className="flex items-start space-x-3">
