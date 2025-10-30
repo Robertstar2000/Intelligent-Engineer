@@ -25,6 +25,7 @@ import { UnifiedLifecycle } from './src/components/UnifiedLifecycle';
 import { Footer } from './src/components/Footer';
 import { IntegrationsPage } from './src/components/IntegrationsPage';
 import { CollaborationPanel } from './src/components/CollaborationPanel';
+import { ChangeManagementPanel } from './src/components/ChangeManagementPanel';
 
 // --- THEME MANAGEMENT ---
 const useTheme = (): [string, React.Dispatch<React.SetStateAction<string>>] => {
@@ -189,7 +190,8 @@ const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setTheme })
                                         className="h-full cursor-pointer hover:border-brand-primary"
                                     >
                                         <h3 className="font-bold">{p.name}</h3>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{p.description}</p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                                             Created: {new Date(p.createdAt).toLocaleDateString()}
                                         </p>
                                          <ProgressBar progress={(p.phases.findIndex(ph => ph.status !== 'completed') === -1 ? 100 : (p.phases.findIndex(ph => ph.status !== 'completed') / p.phases.length) * 100)} className="mt-3"/>
@@ -234,9 +236,10 @@ interface ProjectWizardProps {
 const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   const { currentUser } = useProject();
   const [step, setStep] = useState(1);
-  const [projectData, setProjectData] = useState({ name: '', requirements: '', constraints: '', disciplines: [] as string[] });
+  const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[] });
   const [searchTerm, setSearchTerm] = useState('');
   const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
+  const [hasInteracted, setHasInteracted] = useState({ requirements: false, constraints: false });
   const [requirementsTuning, setRequirementsTuning] = useState({
       clarity: 70,
       technicality: 60,
@@ -297,8 +300,8 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl transform transition-all" title="Create a New Engineering Project" description={`Step ${step} of 5: ${['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines'][step - 1]}`}>
-        <div className="space-y-6">
+      <Card className="w-full max-w-2xl transform transition-all flex flex-col" title="Create a New Engineering Project" description={`Step ${step} of 5: ${['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines'][step - 1]}`}>
+        <div className="space-y-6 flex-grow overflow-y-auto p-6 -m-6 mt-0">
           <ProgressBar progress={progress} />
           {step === 1 && (
             <div>
@@ -307,7 +310,8 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
                  <div className="space-y-3 max-h-96 overflow-y-auto p-1">
                     {PROJECT_TEMPLATES.map(template => (
                         <button key={template.name} type="button" onClick={() => {
-                            setProjectData(p => ({...p, requirements: template.requirements, constraints: template.constraints}));
+                            setProjectData(p => ({...p, description: template.description, requirements: template.requirements, constraints: template.constraints}));
+                            setHasInteracted({ requirements: false, constraints: false });
                             nextStep();
                         }}
                         className="w-full text-left p-4 rounded-lg border-2 border-transparent hover:border-brand-primary bg-gray-50 dark:bg-charcoal-800/50 hover:bg-white dark:hover:bg-charcoal-800 shadow-sm transition-all"
@@ -328,6 +332,10 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
             <div>
               <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Name</label>
               <input type="text" id="projectName" value={projectData.name} onChange={e => setProjectData(p => ({ ...p, name: e.target.value }))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="e.g., Autonomous Drone Delivery System" />
+              <div className="mt-4">
+                <label htmlFor="projectDescription" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Description</label>
+                <textarea id="projectDescription" value={projectData.description} onChange={e => setProjectData(p => ({ ...p, description: e.target.value }))} rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="A brief summary of the project's purpose and goals." />
+              </div>
               <div className="mt-6">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Development Mode</label>
                 <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 p-1">
@@ -349,7 +357,13 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
           {step === 3 && (
             <div>
               <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Requirements</label>
-              <textarea id="requirements" rows={5} value={projectData.requirements} onChange={e => setProjectData(p => ({ ...p, requirements: e.target.value }))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="Define the core objectives, functionalities, and performance criteria." />
+              <textarea id="requirements" rows={5} value={projectData.requirements} 
+                onFocus={() => setHasInteracted(p => ({ ...p, requirements: true }))}
+                onChange={e => {
+                    setProjectData(p => ({ ...p, requirements: e.target.value }));
+                    setHasInteracted(p => ({ ...p, requirements: true }));
+                }} 
+                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.requirements ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="Define the core objectives, functionalities, and performance criteria." />
               <div className="mt-6">
                 <TuningControls
                   settings={requirementsTuning}
@@ -363,7 +377,13 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
           {step === 4 && (
             <div>
               <label htmlFor="constraints" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Constraints</label>
-              <textarea id="constraints" rows={5} value={projectData.constraints} onChange={e => setProjectData(p => ({ ...p, constraints: e.target.value }))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="List any limitations, such as budget, timeline, regulations, or available technologies." />
+              <textarea id="constraints" rows={5} value={projectData.constraints} 
+                onFocus={() => setHasInteracted(p => ({ ...p, constraints: true }))}
+                onChange={e => {
+                  setProjectData(p => ({ ...p, constraints: e.target.value }));
+                  setHasInteracted(p => ({ ...p, constraints: true }));
+                }}
+                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.constraints ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="List any limitations, such as budget, timeline, regulations, or available technologies." />
             </div>
           )}
           {step === 5 && (
@@ -383,10 +403,10 @@ const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
               </div>
             </div>
           )}
-          <div className="flex justify-between mt-8">
-            <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
-            <Button onClick={step === 5 ? createProject : nextStep} disabled={(step === 2 && !projectData.name) || (step === 5 && projectData.disciplines.length === 0)}>{step === 5 ? 'Create Project' : 'Next'}</Button>
-          </div>
+        </div>
+        <div className="flex justify-between mt-8 p-6 pt-0 -m-6 mb-0">
+          <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
+          <Button onClick={step === 5 ? createProject : nextStep} disabled={(step === 2 && !projectData.name) || (step === 5 && projectData.disciplines.length === 0)}>{step === 5 ? 'Create Project' : 'Next'}</Button>
         </div>
       </Card>
     </div>
@@ -407,8 +427,10 @@ interface DashboardProps {
   onRunAutomation: () => void;
   onStopAutomation: () => void;
   isCollaborationPanelOpen: boolean;
+  // FIX: Add setToast to DashboardProps to allow passing it down to child components.
+  setToast: (toast: ToastMessage | null) => void;
 }
-const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, onUpdateProjectDetails, isAutomating, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen }: DashboardProps) => {
+const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, onUpdateProjectDetails, isAutomating, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
   const { project, theme, setTheme } = useProject();
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
@@ -433,6 +455,10 @@ const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam
   const firstIncompleteIndex = project.phases.findIndex(p => p.status !== 'completed');
   const projectProgress = firstIncompleteIndex === -1 ? 100 : (firstIncompleteIndex / project.phases.length) * 100;
   
+  const totalSprints = project.phases.reduce((acc, p) => acc + p.sprints.length, 0);
+  const completedSprints = project.phases.reduce((acc, p) => acc + p.sprints.filter(s => s.status === 'completed').length, 0);
+  const sprintProgress = totalSprints > 0 ? (completedSprints / totalSprints) * 100 : 0;
+  
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
        <ProjectHeader
@@ -453,11 +479,12 @@ const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam
                     <div className="space-y-4">
                         {project.phases.map((phase, index) => {
                             const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
+                            const isCurrent = index === firstIncompleteIndex;
                             const isAutomatingThisPhase = phase.id === automatingPhaseId;
                             const { icon, color } = getStatusIcon(isLocked ? 'not-started' : phase.status);
                             
                             return (
-                                <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : 'bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary'} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
+                                <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
                                     {isAutomatingThisPhase ? (
                                         <div className="p-2 bg-blue-100 dark:bg-brand-primary/20 rounded-full text-brand-primary">
                                             <LoaderCircle className="w-5 h-5 animate-spin" />
@@ -475,14 +502,35 @@ const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam
                         })}
                     </div>
                 </Card>
+                <Card title="Automation Engine">
+                     <div className="space-y-3">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Automatically generate all remaining project phases sequentially.</p>
+                        {isAutomating ? (
+                             <Button onClick={onStopAutomation} variant="danger" className="w-full">
+                                <XCircle className="mr-2 w-4 h-4" /> Stop Automation
+                            </Button>
+                        ) : (
+                            <Button onClick={onRunAutomation} disabled={projectProgress === 100} className="w-full">
+                                <Rocket className="mr-2 w-4 h-4" /> Run Full Automation
+                            </Button>
+                        )}
+                    </div>
+                </Card>
+                <ChangeManagementPanel setToast={setToast} />
             </div>
             <div className="space-y-6">
                 <Card title="Project Status">
-                     <div className="space-y-3">
+                     <div className="space-y-4">
                         <div>
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Progress</span>
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Phase Progress ({firstIncompleteIndex === -1 ? project.phases.length : firstIncompleteIndex}/{project.phases.length})</span>
                             <ProgressBar progress={projectProgress} className="mt-1" />
                         </div>
+                         {totalSprints > 0 && (
+                            <div>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Sprint Progress ({completedSprints}/{totalSprints})</span>
+                                <ProgressBar progress={sprintProgress} className="mt-1" />
+                            </div>
+                         )}
                         <div>
                             <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Phase</span>
                             <p className="font-semibold text-gray-900 dark:text-white">{project.phases[firstIncompleteIndex]?.name || 'Completed'}</p>
@@ -543,20 +591,6 @@ const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam
                         </Button>
                         <Button variant="outline" onClick={onViewTasks}><CheckSquare className="mr-2 w-4 h-4" />Tasks</Button>
                         <Button variant="outline" onClick={onViewIntegrations} className="col-span-2"><Puzzle className="mr-2 w-4 h-4" />Integrations</Button>
-                    </div>
-                </Card>
-                 <Card title="Automation Engine">
-                     <div className="space-y-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Automatically generate all remaining project phases sequentially.</p>
-                        {isAutomating ? (
-                             <Button onClick={onStopAutomation} variant="danger" className="w-full">
-                                <XCircle className="mr-2 w-4 h-4" /> Stop Automation
-                            </Button>
-                        ) : (
-                            <Button onClick={onRunAutomation} disabled={projectProgress === 100} className="w-full">
-                                <Rocket className="mr-2 w-4 h-4" /> Run Full Automation
-                            </Button>
-                        )}
                     </div>
                 </Card>
             </div>
@@ -839,6 +873,7 @@ const EngineeringPartnerApp = () => {
                     onViewTasks={() => setCurrentView('tasks')}
                     onViewIntegrations={() => setCurrentView('integrations')}
                     isCollaborationPanelOpen={isCollaborationPanelOpen}
+                    setToast={setToast}
                 />;
             case 'phase':
                  const phase = selectedPhaseIndex !== null ? currentProject.phases[selectedPhaseIndex] : null;

@@ -28,6 +28,7 @@ export interface Sprint {
   }[];
   selectedTool?: string;
   chatLog?: Message[];
+  generatedDocId?: string;
 }
 
 export interface TuningSettings {
@@ -123,13 +124,14 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt';
+  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic';
   createdAt: Date;
 }
 
 export interface Project {
   id: string;
   name: string;
+  description: string;
   userId: string;
   requirements: string;
   constraints: string;

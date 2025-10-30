@@ -1,7 +1,5 @@
-
-
 import React, { useState } from 'react';
-import { generateStandardPhaseOutput, generateDesignReviewChecklist } from '../../services/geminiService';
+import { generateStandardPhaseOutput, generateDesignReviewChecklist, selectModel } from '../../services/geminiService';
 import { TuningControls } from '../TuningControls';
 import { PhaseOutput } from '../PhaseOutput';
 import { PhaseActions } from '../PhaseActions';
@@ -19,6 +17,7 @@ interface WorkflowProps {
 export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext }: WorkflowProps) => {
     const [isLoading, setIsLoading] = useState(false);
     const [tuningSettings, setTuningSettings] = useState(phase.tuningSettings);
+    const modelForGeneration = selectModel({ phase, tuningSettings });
 
     const handleGenerate = async () => {
         setIsLoading(true);
@@ -96,6 +95,7 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 isLoading={isLoading}
                 isEditable={phase.isEditable && phase.status !== 'completed'}
                 apiKey={process.env.API_KEY || null}
+                modelName={modelForGeneration}
             />
             <PhaseActions
                 phase={phase}
@@ -108,3 +108,4 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
             />
         </>
     );
+};

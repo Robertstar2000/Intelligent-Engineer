@@ -10,7 +10,7 @@ export const Hero = ({ onLoginClick }) => {
           Intelligent Engineering
         </h1>
         <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-8">
-          An AI-powered companion that guides you through the full lifecycle of engineering development, from initial concept to final launch. Streamline documentation, automate workflows, and collaborate with an intelligent partner every step of the way.
+          An AI-powered companion guiding you through the full engineering lifecycle. Generate your first three foundational documents to build a strong base. Then, choose your workflow: continue manually, generating and reviewing each document, or engage the Automation Engine to draft the entire project for you to refine.
         </p>
 
         <div className="mt-12 mb-10 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">

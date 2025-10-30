@@ -4,10 +4,11 @@ import { User, ToastMessage } from '../types';
 import { ProjectHeader } from './ProjectHeader';
 import { Card, Button } from './ui';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Users, Plus, Trash2 } from 'lucide-react';
+import { Users, Plus, Trash2, BrainCircuit, LoaderCircle } from 'lucide-react';
+import { suggestTeamRoles } from '../services/geminiService';
 
 interface InviteMemberModalProps {
-    onInvite: (user: Omit<User, 'id'>) => void;
+    onInvite: (user: Omit<User, 'id' | 'email'>) => void;
     onClose: () => void;
 }
 
@@ -15,6 +16,8 @@ const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onInvite, onClose
     const [name, setName] = useState('');
     const [role, setRole] = useState('');
     const [avatar, setAvatar] = useState('');
+    const [email, setEmail] = useState('');
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -59,13 +62,15 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
     const { project, setProject, currentUser, theme, setTheme } = useProject();
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [userToRemove, setUserToRemove] = useState<User | null>(null);
+    const [suggestedRoles, setSuggestedRoles] = useState<string[] | null>(null);
+    const [isSuggesting, setIsSuggesting] = useState(false);
 
     if (!project) return null;
 
-    const handleAddUser = (newUser: Omit<User, 'id'>) => {
+    const handleAddUser = (newUser: Omit<User, 'id' | 'email'>) => {
         setProject(p => {
             if (!p) return null;
-            const finalUser = { ...newUser, id: `user-${Date.now()}` };
+            const finalUser = { ...newUser, id: `user-${Date.now()}`, email: `${newUser.name.toLowerCase().replace(' ','_')}@example.com` };
             return { ...p, users: [...p.users, finalUser] };
         });
         setIsInviteModalOpen(false);
@@ -90,6 +95,20 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
         setUserToRemove(null);
     };
 
+    const handleSuggestRoles = async () => {
+        if (!project) return;
+        setIsSuggesting(true);
+        try {
+            const roles = await suggestTeamRoles(project);
+            setSuggestedRoles(roles);
+            setToast({ message: 'Successfully suggested team roles.', type: 'success' });
+        } catch (error: any) {
+            setToast({ message: error.message || 'Failed to suggest roles.', type: 'error' });
+        } finally {
+            setIsSuggesting(false);
+        }
+    };
+
     return (
         <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
             <ProjectHeader onGoHome={onBack} theme={theme} setTheme={setTheme} showBackButton />
@@ -106,7 +125,7 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
             <Card>
                 <div className="space-y-3">
                     {project.users.map(user => (
-                        <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                        <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-charcoal-800/50 rounded-lg">
                             <div className="flex items-center space-x-4">
                                 <span className="text-3xl">{user.avatar}</span>
                                 <div>
@@ -120,6 +139,26 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
                         </div>
                     ))}
                 </div>
+            </Card>
+
+            <Card title="AI Role Suggester" description="Analyze project documents to suggest necessary team roles." className="mt-6">
+                {isSuggesting ? (
+                    <div className="text-center p-4"><LoaderCircle className="w-6 h-6 animate-spin mx-auto text-brand-primary"/></div>
+                ) : suggestedRoles ? (
+                    <div className="p-4">
+                        <h4 className="font-semibold mb-2">Suggested Roles:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm">
+                            {suggestedRoles.map((role, index) => <li key={index}>{role}</li>)}
+                        </ul>
+                    </div>
+                ) : (
+                    <div className="p-4 text-center">
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">Click to have an AI analyze your project and suggest key roles.</p>
+                        <Button onClick={handleSuggestRoles}>
+                            <BrainCircuit className="w-4 h-4 mr-2" /> Suggest Roles
+                        </Button>
+                    </div>
+                )}
             </Card>
             
             {isInviteModalOpen && <InviteMemberModal onInvite={handleAddUser} onClose={() => setIsInviteModalOpen(false)} />}

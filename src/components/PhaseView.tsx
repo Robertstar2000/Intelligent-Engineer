@@ -64,6 +64,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onUpdatePhase, onPh
                         onPhaseComplete={onPhaseComplete}
                         setExternalError={setGenerationError}
                         onGoToNext={onReturnToDashboard}
+                        onUpdateProject={onUpdateProject}
                         setToast={setToast}
                     />;
         }

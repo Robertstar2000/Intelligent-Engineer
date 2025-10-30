@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Check, LoaderCircle, GitBranch, Lock, RotateCcw } from 'lucide-react';
 import { Remarkable } from 'remarkable';
-import { Button, Card } from '../ui';
+import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
 import { Project, Phase, Sprint, ToastMessage } from '../../types';
-import { generateCriticalDesignSprints, generateSprintSpecification } from '../../services/geminiService';
+import { generateCriticalDesignSprints, generateSprintSpecification, selectModel } from '../../services/geminiService';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
 import { ToolIntegration } from '../ToolIntegration';
@@ -29,12 +29,15 @@ interface WorkflowProps {
     onPhaseComplete: () => void;
     setExternalError: (message: string) => void;
     onGoToNext: () => void;
+    onUpdateProject: (updatedProject: Project) => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, setToast }: WorkflowProps) => {
+export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, onUpdateProject, setToast }: WorkflowProps) => {
     const [isLoading, setIsLoading] = useState<string | null>(null); // can be 'initial', sprintId, or null
     const [sprintToRevert, setSprintToRevert] = useState<Sprint | null>(null);
+    const modelForInitialSpec = selectModel({ taskType: 'criticalSprints' });
+    const modelForSprintSpec = selectModel({ phase });
     
     useEffect(() => {
         if (typeof Prism !== 'undefined') {
@@ -124,13 +127,16 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
             <Card title="Critical Design" description="This phase breaks down the design into a specification and implementation sprints.">
                 <div className="text-center py-8">
                     <p className="text-gray-600 dark:text-gray-400 mb-4">Generate the initial specification and development sprints.</p>
-                    <Button onClick={handleGenerateInitialSpecAndSprints} disabled={isLoading === 'initial'}>
-                        {isLoading === 'initial' ? (
-                            <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Generating...</>
-                        ) : (
-                            <><Play className="mr-2 w-4 h-4" />Generate Spec & Sprints</>
-                        )}
-                    </Button>
+                    <div className="inline-flex flex-col items-center gap-2">
+                        <Button onClick={handleGenerateInitialSpecAndSprints} disabled={isLoading === 'initial'}>
+                            {isLoading === 'initial' ? (
+                                <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Generating...</>
+                            ) : (
+                                <><Play className="mr-2 w-4 h-4" />Generate Spec & Sprints</>
+                            )}
+                        </Button>
+                        <ModelBadge modelName={modelForInitialSpec} />
+                    </div>
                 </div>
             </Card>
         );
@@ -170,11 +176,14 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                     </div>
                                     <div className="ml-2 flex-shrink-0">
                                        {!sprint.output && sprint.status !== 'completed' && (
-                                           <Button size="sm" onClick={() => handleGenerateSprintSpec(sprint.id)} disabled={!!isLoading || isLockedByDependency}>
-                                                {isLoading === sprint.id ? (
-                                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
-                                                ) : 'Generate Spec'}
-                                           </Button>
+                                           <div className="flex items-center space-x-2">
+                                                <Button size="sm" onClick={() => handleGenerateSprintSpec(sprint.id)} disabled={!!isLoading || isLockedByDependency}>
+                                                    {isLoading === sprint.id ? (
+                                                        <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
+                                                    ) : 'Generate Spec'}
+                                                </Button>
+                                                <ModelBadge modelName={modelForSprintSpec} />
+                                           </div>
                                        )}
                                     </div>
                                </div>
@@ -189,9 +198,10 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                         disabled={sprint.status === 'completed' || isLockedByDependency}
                                     />
                                 </div>
-                                <ToolIntegration 
+                                <ToolIntegration
                                     sprint={sprint}
-                                    onUpdateSprint={handleUpdateSprint}
+                                    project={project}
+                                    onUpdateProject={onUpdateProject}
                                     setToast={setToast}
                                 />
                                 <AttachmentManager
@@ -211,12 +221,15 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                             dangerouslySetInnerHTML={{ __html: md.render(sprint.output || '') }}
                                         />
                                         {sprint.status !== 'completed' && (
-                                            <div className="mt-2 flex justify-end space-x-2">
-                                                <Button size="sm" variant="outline" onClick={() => handleGenerateSprintSpec(sprint.id)} disabled={!!isLoading}>
-                                                    {isLoading === sprint.id ? (
-                                                        <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
-                                                    ) : 'Regenerate'}
-                                                </Button>
+                                            <div className="mt-2 flex justify-end items-center space-x-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <Button size="sm" variant="outline" onClick={() => handleGenerateSprintSpec(sprint.id)} disabled={!!isLoading}>
+                                                        {isLoading === sprint.id ? (
+                                                            <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
+                                                        ) : 'Regenerate'}
+                                                    </Button>
+                                                     <ModelBadge modelName={modelForSprintSpec} />
+                                                </div>
                                                 <Button size="sm" onClick={() => handleAcceptAndMerge(sprint.id)} disabled={!!isLoading}>
                                                     Accept & Merge
                                                 </Button>

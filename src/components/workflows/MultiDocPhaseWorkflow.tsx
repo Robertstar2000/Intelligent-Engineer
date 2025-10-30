@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Remarkable } from 'remarkable';
 import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap } from 'lucide-react';
-import { Button, Card } from '../ui';
+import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
 import { Project, Phase, Sprint, ToastMessage } from '../../types';
-import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints } from '../../services/geminiService';
+import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel } from '../../services/geminiService';
 import { MarkdownEditor } from '../MarkdownEditor';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
@@ -39,6 +39,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
     const [editedSprintOutput, setEditedSprintOutput] = useState('');
     const [isMerging, setIsMerging] = useState(false);
     const [isLoadingSprints, setIsLoadingSprints] = useState(false);
+    const modelForGeneration = selectModel({ phase });
 
     useEffect(() => {
         if (typeof Prism !== 'undefined') {
@@ -159,17 +160,20 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                 </div>
                                 <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
                                     {doc.status === 'completed' ? <Check className="w-5 h-5 text-green-500" /> : (
-                                        <Button
-                                            size="sm"
-                                            onClick={() => handleGenerateSubDocument(doc.id)}
-                                            disabled={loadingDocId !== null || isLocked}
-                                        >
-                                            {loadingDocId === doc.id ? (
-                                                <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
-                                            ) : (
-                                                <><Play className="mr-2 w-4 h-4" />Generate</>
-                                            )}
-                                        </Button>
+                                        <div className="flex items-center space-x-2">
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleGenerateSubDocument(doc.id)}
+                                                disabled={loadingDocId !== null || isLocked}
+                                            >
+                                                {loadingDocId === doc.id ? (
+                                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
+                                                ) : (
+                                                    <><Play className="mr-2 w-4 h-4" />Generate</>
+                                                )}
+                                            </Button>
+                                             <ModelBadge modelName={modelForGeneration} />
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -186,7 +190,8 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                             </div>
                             <ToolIntegration
                                 sprint={doc}
-                                onUpdateSprint={handleUpdateSprint}
+                                project={project}
+                                onUpdateProject={onUpdateProject}
                                 setToast={setToast}
                             />
                             <AttachmentManager

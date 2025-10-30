@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Eye, X } from 'lucide-react';
+import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Eye, X, Edit3, Save, Image as ImageIcon } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { Project, Phase, ToastMessage, MetaDocument, Message } from '../types';
 import { generateVibePrompt as generateVibePromptFromService, generateProjectSummary } from '../services/geminiService';
 import { Remarkable } from 'remarkable';
+import { MarkdownEditor } from './MarkdownEditor';
+
 
 declare const JSZip: any;
 declare const Prism: any;
@@ -14,25 +16,39 @@ const md = new Remarkable({ html: true });
 const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9_.]/gi, '_').toLowerCase();
 
 const downloadFile = (filename: string, content: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = content;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 };
 
-const DocumentViewerModal = ({ isOpen, onClose, document }) => {
+const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedContent, setEditedContent] = useState('');
+    
+    const isVisualAsset = document && ['diagram', 'wireframe', 'schematic'].includes(document.type);
+
     useEffect(() => {
-        if (isOpen && document?.content) {
-            setTimeout(() => Prism.highlightAll(), 0);
+        if (isOpen && document) {
+            setEditedContent(document.content || '');
+            setIsEditing(false); // Reset to view mode when opened
         }
     }, [isOpen, document]);
+
+    useEffect(() => {
+        if (isOpen && !isEditing && document?.content && !isVisualAsset) {
+            setTimeout(() => Prism.highlightAll(), 0);
+        }
+    }, [isOpen, isEditing, document, isVisualAsset]);
     
     if (!isOpen || !document) return null;
+
+    const handleSave = () => {
+        onSave(document.id, editedContent);
+        setIsEditing(false);
+    };
 
     return (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4" onClick={onClose}>
@@ -44,58 +60,87 @@ const DocumentViewerModal = ({ isOpen, onClose, document }) => {
             >
                 <div className="flex items-center justify-between p-4 border-b dark:border-charcoal-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">{document.name}</h2>
-                    <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-charcoal-700">
-                        <X className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center space-x-2">
+                        {!isVisualAsset && (
+                            isEditing ? (
+                                <Button size="sm" onClick={handleSave}><Save className="w-4 h-4 mr-2" />Save</Button>
+                            ) : (
+                                <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}><Edit3 className="w-4 h-4 mr-2" />Edit</Button>
+                            )
+                        )}
+                        <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-charcoal-700">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
-                <div 
-                    className="p-6 overflow-y-auto flex-grow prose dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: md.render(document.content || '') }}
-                />
+                {isVisualAsset ? (
+                    <div className="p-4 flex-grow flex items-center justify-center bg-gray-100 dark:bg-charcoal-900/50">
+                        <img src={document.content} alt={document.name} className="max-w-full max-h-full object-contain rounded-lg shadow-lg"/>
+                    </div>
+                ) : isEditing ? (
+                    <div className="p-1 flex-grow">
+                         <MarkdownEditor value={editedContent} onChange={setEditedContent} />
+                    </div>
+                ) : (
+                    <div 
+                        className="p-6 overflow-y-auto flex-grow prose dark:prose-invert max-w-none"
+                        dangerouslySetInnerHTML={{ __html: md.render(document.content || '') }}
+                    />
+                )}
             </Card>
         </div>
     );
 };
 
 
-const DownloadDropdown = ({ documentName, documentContent }) => {
+const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const isVisualAsset = ['diagram', 'wireframe', 'schematic'].includes(documentType);
 
-    const handleDownload = (format: 'md' | 'txt' | 'doc' | 'pdf') => {
-        const filename = `${sanitizeFilename(documentName)}.${format}`;
-        
-        if (format === 'md') {
-            downloadFile(filename, documentContent, 'text/markdown');
-        } else if (format === 'txt') {
-            const textContent = documentContent
-                .replace(/#+\s/g, '')
-                .replace(/(\*\*|__)(.*?)\1/g, '$2')
-                .replace(/(\*|_)(.*?)\1/g, '$2')
-                .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
-                .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-                .replace(/!\[(.*?)\]\(.*?\)/g, '');
-            downloadFile(filename, textContent, 'text/plain');
-        } else if (format === 'doc') {
-            const htmlContent = md.render(documentContent);
-            const docContent = `
-              <!DOCTYPE html><html><head><meta charset="utf-8"><title>${documentName}</title></head>
-              <body>${htmlContent}</body></html>`;
-            downloadFile(filename, docContent, 'application/msword');
-        } else if (format === 'pdf') {
-            const htmlContent = md.render(documentContent);
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(`
-                <html><head><title>Print - ${documentName}</title>
-                <style>
-                    body { font-family: sans-serif; line-height: 1.6; }
-                    pre, code { white-space: pre-wrap; background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
-                    .prose { max-width: 800px; margin: 0 auto; }
-                </style>
-                </head><body><div class="prose">${htmlContent}</div></body></html>`);
-            printWindow.document.close();
-            printWindow.focus();
-            printWindow.print();
+    const handleDownload = (format: 'md' | 'txt' | 'doc' | 'pdf' | 'png') => {
+        if (isVisualAsset) {
+            downloadFile(`${sanitizeFilename(documentName)}.png`, documentContent, 'image/png');
+        } else {
+             const filename = `${sanitizeFilename(documentName)}.${format}`;
+            const blob = new Blob([documentContent], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+
+            if (format === 'md') {
+                downloadFile(filename, url, 'text/markdown');
+            } else if (format === 'txt') {
+                 const textContent = documentContent
+                    .replace(/#+\s/g, '')
+                    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+                    .replace(/(\*|_)(.*?)\1/g, '$2')
+                    .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
+                    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+                    .replace(/!\[(.*?)\]\(.*?\)/g, '');
+                const textBlob = new Blob([textContent], { type: 'text/plain' });
+                downloadFile(filename, URL.createObjectURL(textBlob), 'text/plain');
+            } else if (format === 'doc') {
+                const htmlContent = md.render(documentContent);
+                const docContent = `
+                <!DOCTYPE html><html><head><meta charset="utf-8"><title>${documentName}</title></head>
+                <body>${htmlContent}</body></html>`;
+                const docBlob = new Blob([docContent], { type: 'application/msword' });
+                downloadFile(filename, URL.createObjectURL(docBlob), 'application/msword');
+            } else if (format === 'pdf') {
+                const htmlContent = md.render(documentContent);
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <html><head><title>Print - ${documentName}</title>
+                    <style>
+                        body { font-family: sans-serif; line-height: 1.6; }
+                        pre, code { white-space: pre-wrap; background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+                        .prose { max-width: 800px; margin: 0 auto; }
+                    </style>
+                    </head><body><div class="prose">${htmlContent}</div></body></html>`);
+                printWindow.document.close();
+                printWindow.focus();
+                printWindow.print();
+            }
         }
+
         setIsOpen(false);
     };
 
@@ -111,10 +156,16 @@ const DownloadDropdown = ({ documentName, documentContent }) => {
             {isOpen && (
                 <div className="origin-top-right absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white dark:bg-charcoal-800 ring-1 ring-black ring-opacity-5 z-10">
                     <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
-                        <button onClick={() => handleDownload('md')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Markdown (.md)</button>
-                        <button onClick={() => handleDownload('txt')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Plain Text (.txt)</button>
-                        <button onClick={() => handleDownload('doc')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Word (.doc)</button>
-                        <button onClick={() => handleDownload('pdf')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">PDF (.pdf)</button>
+                        {isVisualAsset ? (
+                             <button onClick={() => handleDownload('png')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Image (.png)</button>
+                        ) : (
+                            <>
+                                <button onClick={() => handleDownload('md')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Markdown (.md)</button>
+                                <button onClick={() => handleDownload('txt')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Plain Text (.txt)</button>
+                                <button onClick={() => handleDownload('doc')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">Word (.doc)</button>
+                                <button onClick={() => handleDownload('pdf')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-charcoal-700">PDF (.pdf)</button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -150,7 +201,7 @@ interface DocumentsPageProps {
 export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }) => {
     const { project, updateProject } = useProject();
     const [isLoading, setIsLoading] = useState<string | null>(null);
-    const [viewingDocument, setViewingDocument] = useState<{ name: string; content: string; } | null>(null);
+    const [editingDocument, setEditingDocument] = useState<{ id: string; name: string; content: string; type: string; } | null>(null);
 
     if (!project) return null;
 
@@ -195,9 +246,15 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 }
             });
             
-            (project.metaDocuments || []).forEach(doc => {
-                projectFolder.file(sanitizeFilename(doc.name) + '.md', doc.content);
-            });
+            for (const doc of (project.metaDocuments || [])) {
+                const isVisualAsset = ['diagram', 'wireframe', 'schematic'].includes(doc.type);
+                if (isVisualAsset) {
+                    const base64Data = doc.content.split(',')[1];
+                    projectFolder.file(sanitizeFilename(doc.name) + '.png', base64Data, { base64: true });
+                } else {
+                    projectFolder.file(sanitizeFilename(doc.name) + '.md', doc.content);
+                }
+            }
 
             const zipContent = await zip.generateAsync({ type: 'blob' });
             const a = document.createElement('a');
@@ -237,7 +294,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
             };
             const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
             updateProject({...project, metaDocuments: updatedMetaDocs});
-            downloadFile(`${sanitizeFilename(newDoc.name)}.md`, newDoc.content, 'text/markdown');
+            const blob = new Blob([newDoc.content], { type: 'text/markdown' });
+            downloadFile(`${sanitizeFilename(newDoc.name)}.md`, URL.createObjectURL(blob), 'text/markdown');
             setToast({ message: `${type_map[type]} generated and saved.`, type: 'success' });
         } catch (error: any) {
             setToast({ message: `Failed to generate ${type_map[type]}.`, type: 'error' });
@@ -266,6 +324,46 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         } finally {
             setIsLoading(null);
         }
+    };
+
+    const handleUpdateDocumentContent = (docId: string, newContent: string) => {
+        if (!project) return;
+
+        const [type, ...rest] = docId.split('-');
+        const id = rest.join('-');
+
+        let updatedProject = { ...project };
+
+        if (type === 'meta') {
+            updatedProject.metaDocuments = (updatedProject.metaDocuments || []).map(d =>
+                d.id === docId ? { ...d, content: newContent } : d
+            );
+        } else {
+            updatedProject.phases = project.phases.map(phase => {
+                if (type === 'phase' && phase.id === id) {
+                    return { ...phase, output: newContent };
+                }
+                 if (type === 'chat' && phase.id === id) {
+                    setToast({ message: "Chat logs are read-only.", type: "info" });
+                    return phase;
+                }
+                
+                const sprintIndex = phase.sprints.findIndex(s => s.id === id);
+                if (type === 'sprint' && sprintIndex > -1) {
+                    const updatedSprints = [...phase.sprints];
+                    updatedSprints[sprintIndex] = { ...updatedSprints[sprintIndex], output: newContent };
+                    return { ...phase, sprints: updatedSprints };
+                }
+                 if (type === 'chat' && sprintIndex > -1) {
+                    setToast({ message: "Chat logs are read-only.", type: "info" });
+                    return phase;
+                }
+
+                return phase;
+            });
+        }
+        updateProject(updatedProject);
+        setToast({ message: 'Document updated successfully!', type: 'success' });
     };
 
     const allDocuments = [];
@@ -311,11 +409,19 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
     });
     
     (project.metaDocuments || []).forEach(doc => {
+        const typeMap = {
+            'executive-summary': 'Summary',
+            'code-vibe-prompt': 'Vibe Prompt',
+            'simulation-vibe-prompt': 'Vibe Prompt',
+            'diagram': 'Diagram',
+            'wireframe': '3D Wireframe',
+            'schematic': 'Schematic',
+        };
         allDocuments.push({
-            id: `meta-${doc.id}`,
+            id: doc.id,
             name: doc.name,
             content: doc.content,
-            type: doc.type === 'executive-summary' ? 'Summary' : 'Vibe Prompt'
+            type: typeMap[doc.type] || doc.type,
         });
     });
 
@@ -334,17 +440,17 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
              <Card title="Project Exports & Handoffs" description="Generate comprehensive project artifacts for other tools and team members." className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                      <Button onClick={handleDownloadAll} disabled={isLoading === 'zip'} className="flex-col h-auto py-4">
-                        <Package className="w-6 h-6 mb-2" />
+                        {isLoading === 'zip' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <Package className="w-6 h-6 mb-2" />}
                         <span className="font-semibold">Download All as .zip</span>
                         <span className="text-xs font-normal mt-1">A complete, structured archive of all documents.</span>
                     </Button>
                     <Button onClick={() => handleVibePrompt('code')} disabled={!!isLoading} variant="outline" className={`flex-col h-auto py-4 ${hasCodeVibePrompt ? 'border-brand-primary bg-brand-primary/10' : ''}`}>
-                        <BrainCircuit className="w-6 h-6 mb-2" />
+                        {isLoading === 'code' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <BrainCircuit className="w-6 h-6 mb-2" />}
                         <span className="font-semibold">Generate Code Vibe Prompt</span>
                         <span className="text-xs font-normal mt-1">Create a master prompt for an AI coding assistant.</span>
                     </Button>
                     <Button onClick={() => handleVibePrompt('simulation')} disabled={!!isLoading} variant="outline" className={`flex-col h-auto py-4 ${hasSimulationVibePrompt ? 'border-brand-primary bg-brand-primary/10' : ''}`}>
-                        <Bot className="w-6 h-6 mb-2" />
+                        {isLoading === 'simulation' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <Bot className="w-6 h-6 mb-2" />}
                         <span className="font-semibold">Generate Simulation Prompt</span>
                         <span className="text-xs font-normal mt-1">Create a prompt for simulating the system's logic.</span>
                     </Button>
@@ -360,19 +466,19 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 <div className="space-y-3">
                     {allDocuments.length > 0 ? allDocuments.map(doc => (
                         <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-charcoal-800/50 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                                <FileText className="w-5 h-5 text-brand-primary flex-shrink-0" />
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">{doc.name}</p>
+                            <div className="flex items-center space-x-3 min-w-0">
+                                {['Diagram', '3D Wireframe', 'Schematic'].includes(doc.type) ? <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" /> : <FileText className="w-5 h-5 text-brand-primary flex-shrink-0" />}
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-gray-900 dark:text-white truncate">{doc.name}</p>
                                     <Badge>{doc.type}</Badge>
                                     {doc.phaseName && <Badge className="ml-1">{doc.phaseName}</Badge>}
                                 </div>
                             </div>
-                             <div className="flex items-center space-x-2">
-                                <Button size="sm" variant="outline" onClick={() => setViewingDocument(doc)}>
-                                    <Eye className="mr-2 w-4 h-4" /> View
+                             <div className="flex items-center space-x-2 flex-shrink-0">
+                                <Button size="sm" variant="outline" onClick={() => setEditingDocument(doc)}>
+                                    <Edit3 className="mr-2 w-4 h-4" /> View
                                 </Button>
-                                <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} />
+                                <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={doc.type} />
                             </div>
                         </div>
                     )) : (
@@ -380,7 +486,12 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                     )}
                 </div>
             </Card>
-            <DocumentViewerModal isOpen={!!viewingDocument} onClose={() => setViewingDocument(null)} document={viewingDocument} />
+            <DocumentEditorModal 
+                isOpen={!!editingDocument} 
+                onClose={() => setEditingDocument(null)} 
+                document={editingDocument}
+                onSave={handleUpdateDocumentContent}
+             />
         </div>
     );
 };

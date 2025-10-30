@@ -1,4 +1,5 @@
 
+
 export const HELP_CONTENT = `
 # Intelligent Engineering Partner - Help Guide
 
@@ -57,7 +58,23 @@ These phases require you to generate a series of distinct documents to complete 
 -   Click **"Download .md"** to get a single file.
 -   Click **"Download All as .zip"** to get a complete archive of your project documentation.
 
-## 3. Best-in-Class Engineering Workflows
+## 3. Methodology & Workflows
+
+### Understanding HMAP (Human-Mediated Agentic Process)
+
+The Intelligent Engineering Partner is built on a core philosophy called HMAP, which stands for **Human-Mediated Agentic Process**. This isn't just about having an AI write documents for you; it's a collaborative partnership where you are always in control.
+
+#### How it Works:
+
+1.  **You Initiate**: Every task, from generating a requirements document to creating a test plan, is initiated by you. You provide the high-level goals and context.
+2.  **You Tune**: Before generation, you can use the **Tuning Controls** to guide the AI's "thought process." Need a highly creative and conceptual design? Increase the \`creativity\` slider. Need a rigorous, safety-critical FMEA? Increase \`technicalDepth\` and \`failureAnalysis\`. This allows you to tailor the AI's output to the specific needs of the task at hand.
+3.  **AI Generates**: The AI acts as your agent, taking your direction and the project's context to produce a detailed, professional first draft. It does the heavy lifting of research, structuring, and writing.
+4.  **You Verify and Refine**: **This is the most critical step.** The AI's output is never final. You, the human expert, review the generated content. You can use the built-in editor to make changes, correct inaccuracies, add proprietary knowledge, and ensure the document meets your standards. You can also ask the AI to regenerate the content with different tuning parameters.
+5.  **You Approve**: Only when you are satisfied with the document do you mark the task or phase as complete. This final approval is a human decision, ensuring that every piece of the project has been validated by an expert.
+
+This process ensures you get the speed and power of AI without sacrificing the quality, accuracy, and expert oversight required for professional engineering projects. The AI is a powerful tool, but you are always the engineer in charge.
+
+### Best-in-Class Engineering Workflows
 
 This tool has several professional engineering processes built directly into the workflow.
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Edit3, Save } from 'lucide-react';
-import { Button, Card } from './ui';
+import { Sliders, Edit3, Save, LoaderCircle } from 'lucide-react';
+import { Button, Card, ModelBadge } from './ui';
 import { Remarkable } from 'remarkable';
 import { Phase } from '../types';
 import { MarkdownEditor } from './MarkdownEditor';
@@ -29,9 +29,10 @@ interface PhaseOutputProps {
     isLoading: boolean;
     isEditable?: boolean;
     apiKey: string | null;
+    modelName: string;
 }
 
-export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true, apiKey }: PhaseOutputProps) => {
+export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true, apiKey, modelName }: PhaseOutputProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutput, setEditedOutput] = useState(phase.output || '');
 
@@ -62,31 +63,37 @@ export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable =
                 {!phase.output ? (
                     <div className="text-center py-8">
                         <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
-                        <Button onClick={onGenerate} disabled={!apiKey || isLoading}>
-                            {isLoading ? (
-                                <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-white"></div>Generating...</>
-                            ) : (
-                                <><Sliders className="mr-2 w-4 h-4" />Generate Output with AI</>
-                            )}
-                        </Button>
+                        <div className="inline-flex flex-col items-center gap-2">
+                            <Button onClick={onGenerate} disabled={!apiKey || isLoading}>
+                                {isLoading ? (
+                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Generating...</>
+                                ) : (
+                                    <><Sliders className="mr-2 w-4 h-4" />Generate Output with AI</>
+                                )}
+                            </Button>
+                            <ModelBadge modelName={modelName} />
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
                             <h4 className="font-semibold dark:text-white">Generated Content</h4>
-                            <div className="flex space-x-2">
+                            <div className="flex items-center space-x-2">
                                 {!isEditing && isEditable && (
                                     <>
                                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                                             <Edit3 className="mr-2 w-4 h-4" />Edit
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={onGenerate} disabled={!apiKey || isLoading}>
-                                            {isLoading ? (
-                                                <><div className="mr-2 w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>Regenerating...</>
-                                            ) : (
-                                                <><Sliders className="mr-2 w-4 h-4" />Regenerate</>
-                                            )}
-                                        </Button>
+                                        <div className="inline-flex flex-col items-end gap-1">
+                                            <Button variant="outline" size="sm" onClick={onGenerate} disabled={!apiKey || isLoading}>
+                                                {isLoading ? (
+                                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
+                                                ) : (
+                                                    <><Sliders className="mr-2 w-4 h-4" />Regenerate</>
+                                                )}
+                                            </Button>
+                                            <ModelBadge modelName={modelName} />
+                                        </div>
                                     </>
                                 )}
                             </div>

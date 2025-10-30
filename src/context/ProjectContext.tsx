@@ -70,9 +70,14 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     }, [projects, currentUser]);
 
     const updateProject = (updatedProject: Project) => {
-        setProjects(prevProjects => 
-            prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
-        );
+        setProjects(prevProjects => {
+            const projectExists = prevProjects.some(p => p.id === updatedProject.id);
+            if (projectExists) {
+                return prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p);
+            } else {
+                return [...prevProjects, updatedProject];
+            }
+        });
         if (project && project.id === updatedProject.id) {
             setProject(updatedProject);
         }
