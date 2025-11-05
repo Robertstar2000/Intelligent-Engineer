@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { CheckCircle, Plus, Search } from 'lucide-react';
+import { CheckCircle, Plus, Search, LoaderCircle } from 'lucide-react';
 import { Button, Card, ProgressBar } from '../components/ui';
 import { TuningControls } from '../components/TuningControls';
 import { useProject } from '../context/ProjectContext';
 import { Project, Phase } from '../types';
 import { PROJECT_TEMPLATES, ENGINEERING_DISCIPLINES } from '../constants';
+import { generateTailoredPhaseDescriptions } from '../services/geminiService';
 
 interface ProjectWizardProps {
   onProjectCreated: (project: Project) => void;
@@ -29,15 +30,11 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   const filteredDisciplines = ENGINEERING_DISCIPLINES.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleDisciplineToggle = (discipline: string) => setProjectData(prev => ({ ...prev, disciplines: prev.disciplines.includes(discipline) ? prev.disciplines.filter(d => d !== discipline) : prev.disciplines.length < 3 ? [...prev.disciplines, discipline] : prev.disciplines }));
   
-  const createProject = () => {
-    if (!currentUser) return; // Should not happen if this component is rendered
-    const newProject: Project = {
-      id: Date.now().toString(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
-      compactedContext: '',
-      metaDocuments: [],
-      users: [currentUser],
-      comments: {},
-      phases: [
+  const createProject = async () => {
+    if (!currentUser) return;
+    setStep(6); // Move to the finalizing step
+    
+    const basePhases: Phase[] = [
         { id: '1', name: 'Requirements', description: 'Define clear functional and performance objectives', status: 'not-started', 
             sprints: [
                 { id: '1-1', name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.', status: 'not-started', deliverables: [], output: '' },
@@ -67,19 +64,43 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
         { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: true, designReview: { required: false, checklist: [] } },
         { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: true, designReview: { required: false, checklist: [] } },
         { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: true, designReview: { required: false, checklist: [] } }
-      ]
+      ];
+
+    let finalPhases = basePhases;
+    if (process.env.API_KEY) {
+        try {
+            const phaseList = basePhases.map(p => ({ name: p.name, description: p.description }));
+            const tailoredDescriptions = await generateTailoredPhaseDescriptions(projectData.disciplines, phaseList);
+            finalPhases = basePhases.map(phase => ({
+                ...phase,
+                description: tailoredDescriptions[phase.name] || phase.description,
+            }));
+        } catch (error) {
+            console.error("Could not tailor phase descriptions, using defaults.", error);
+        }
+    }
+
+    const newProject: Project = {
+      id: Date.now().toString(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
+      compactedContext: '',
+      metaDocuments: [],
+      users: [currentUser],
+      comments: {},
+      phases: finalPhases,
     };
+    
     addProject(newProject);
     onProjectCreated(newProject);
   };
 
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
-  const progress = (step / 5) * 100;
+  const progress = (step / 6) * 100;
+  const titles = ['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines', 'Finalizing Project...'];
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl transform transition-all flex flex-col" title="Create a New Engineering Project" description={`Step ${step} of 5: ${['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines'][step - 1]}`}>
+      <Card className="w-full max-w-2xl transform transition-all flex flex-col" title="Create a New Engineering Project" description={`Step ${step} of 6: ${titles[step - 1]}`}>
         <div className="space-y-6 flex-grow overflow-y-auto p-6 -m-6 mt-0">
           <ProgressBar progress={progress} />
           {step === 1 && (
@@ -182,11 +203,19 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
               </div>
             </div>
           )}
+          {step === 6 && (
+              <div className="text-center py-12">
+                  <LoaderCircle className="w-12 h-12 mx-auto text-brand-primary animate-spin" />
+                  <p className="mt-4 text-gray-600 dark:text-gray-400">Tailoring project lifecycle with AI...</p>
+              </div>
+          )}
         </div>
-        <div className="flex justify-between mt-8 p-6 pt-0 -m-6 mb-0">
-          <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
-          <Button onClick={step === 5 ? createProject : nextStep} disabled={(step === 2 && !projectData.name) || (step === 5 && projectData.disciplines.length === 0)}>{step === 5 ? 'Create Project' : 'Next'}</Button>
-        </div>
+        {step < 6 && (
+            <div className="flex justify-between mt-8 p-6 pt-0 -m-6 mb-0">
+              <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
+              <Button onClick={step === 5 ? createProject : nextStep} disabled={(step === 2 && !projectData.name) || (step === 5 && projectData.disciplines.length === 0)}>{step === 5 ? 'Create Project' : 'Next'}</Button>
+            </div>
+        )}
       </Card>
     </div>
   );

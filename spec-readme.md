@@ -1,8 +1,8 @@
-# Intelligent Engineering Partner - Specification Document
+# Vibe Engineering Partner - Specification Document
 
 ## 1. Application Overview
 
-The **Intelligent Engineering Partner** is a sophisticated web application that serves as an AI-powered companion for engineers, guiding them through the complete project lifecycle. Built with React and leveraging the Google Gemini API (`gemini-2.5-flash` model), the application provides a structured, phase-based workflow incorporating industry-best practices like **Trade Studies**, **Design for Manufacturing and Assembly (DFMA)**, **Failure Modes and Effects Analysis (FMEA)**, and formal **Verification and Validation (V&V)** planning.
+The **Vibe Engineering Partner** is a sophisticated web application that serves as an AI-powered companion for engineers, guiding them through the complete project lifecycle. Built with React and leveraging the Google Gemini API (`gemini-2.5-flash` model), the application provides a structured, phase-based workflow incorporating industry-best practices like **Trade Studies**, **Design for Manufacturing and Assembly (DFMA)**, **Failure Modes and Effects Analysis (FMEA)**, and formal **Verification and Validation (V&V)** planning.
 
 The core methodology is a **Human-Mediated Agentic Process (HMAP)**. The user initiates and guides the AI, tunes its generation parameters, and retains full editorial control over all generated content. This ensures a collaborative process where the AI provides powerful drafts and analyses, while the human expert provides the final verification, refinement, and approval.
 

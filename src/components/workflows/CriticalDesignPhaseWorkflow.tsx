@@ -4,7 +4,7 @@ import { Remarkable } from 'remarkable';
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
 import { Project, Phase, Sprint, ToastMessage } from '../../types';
-import { generateCriticalDesignSprints, generateSprintSpecification, selectModel } from '../../services/geminiService';
+import { generateCriticalDesignSprints, generateSprintSpecification, selectModel, generateDesignReviewChecklist } from '../../services/geminiService';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
 import { ToolIntegration } from '../ToolIntegration';
@@ -34,7 +34,7 @@ interface WorkflowProps {
 }
 
 export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, onUpdateProject, setToast }: WorkflowProps) => {
-    const [isLoading, setIsLoading] = useState<string | null>(null); // can be 'initial', sprintId, or null
+    const [isLoading, setIsLoading] = useState<string | null>(null); // can be 'initial', 'commit', sprintId, or null
     const [sprintToRevert, setSprintToRevert] = useState<Sprint | null>(null);
     const modelForInitialSpec = selectModel({ taskType: 'criticalSprints' });
     const modelForSprintSpec = selectModel({ phase });
@@ -86,6 +86,25 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
             s.id === sprintId ? { ...s, status: 'completed' } : s
         );
         onUpdatePhase(phase.id, { output: updatedOutput, sprints: updatedSprints });
+    };
+
+    const handleCommitForReview = async () => {
+        if (!phase.output) return;
+        setIsLoading('commit');
+        setExternalError('');
+        try {
+            const checklist = await generateDesignReviewChecklist(phase.output);
+            const updates: Partial<Phase> = {
+                status: 'in-review',
+                designReview: { ...phase.designReview, checklist: checklist },
+            };
+            onUpdatePhase(phase.id, updates);
+            setToast({ message: `${phase.name} phase committed for design review.`, type: 'success' });
+        } catch (error: any) {
+            setExternalError(error.message || "Failed to generate design review checklist.");
+        } finally {
+            setIsLoading(null);
+        }
     };
     
     const handleUpdateSprint = (sprintId: string, updates: Partial<Sprint>) => {
@@ -246,8 +265,9 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                             <Button variant="outline" onClick={handleRevertLastSprint} disabled={completedSprintIds.size === 0 || !!isLoading}>
                                 <RotateCcw className="mr-2 w-4 h-4" /> Revert Last Sprint
                             </Button>
-                            <Button onClick={onPhaseComplete} disabled={!allSprintsAccepted || !!isLoading}>
-                                <Check className="mr-2 w-4 h-4" /> Commit for Design Review
+                            <Button onClick={handleCommitForReview} disabled={!allSprintsAccepted || !!isLoading}>
+                                {isLoading === 'commit' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Check className="mr-2 w-4 h-4" />}
+                                Commit for Design Review
                             </Button>
                         </div>
                     ) : (

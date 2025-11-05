@@ -1,6 +1,6 @@
 # Project Task List & Completion Status
 
-This document outlines the development phases for the Intelligent Engineering Partner application. The completion status has been evaluated based on the features currently implemented in the codebase.
+This document outlines the development phases for the Vibe Engineering Partner application. The completion status has been evaluated based on the features currently implemented in the codebase.
 
 ## Phase 1: Foundation and Core Infrastructure
 

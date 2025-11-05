@@ -4,10 +4,70 @@ import { Project, Phase, Sprint, Task, ToastMessage, User } from '../types';
 import { ProjectHeader } from './ProjectHeader';
 import { Card, Button } from './ui';
 import { Plus, MoreVertical, Zap, LoaderCircle, AlertTriangle } from 'lucide-react';
-import { generateTaskDescription } from '../services/geminiService';
+import { generateTaskDescription, generatePhaseTasks } from '../services/geminiService';
 import { Remarkable } from 'remarkable';
 
 const md = new Remarkable({ html: true });
+
+const SuggestTasksModal = ({ onClose, setToast }) => {
+    const { project, addTask } = useProject();
+    const [selectedPhaseId, setSelectedPhaseId] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleGenerate = async () => {
+        if (!project || !selectedPhaseId) {
+            setToast({ message: "Please select a phase.", type: 'error' });
+            return;
+        }
+        setIsGenerating(true);
+        try {
+            const phase = project.phases.find(p => p.id === selectedPhaseId);
+            if (!phase) throw new Error("Phase not found.");
+
+            const suggestedTasks = await generatePhaseTasks(project, phase);
+
+            suggestedTasks.forEach(taskInfo => {
+                 const assignee = project.users.find(u => u.role.toLowerCase() === taskInfo.assigneeRole.toLowerCase());
+                 addTask(project.id, {
+                    title: taskInfo.title,
+                    description: `${taskInfo.description}\n\n*Suggested Role: ${taskInfo.assigneeRole}*`,
+                    status: 'todo',
+                    assigneeId: assignee?.id || null,
+                    phaseId: selectedPhaseId,
+                    priority: taskInfo.priority,
+                 });
+            });
+            setToast({ message: `${suggestedTasks.length} tasks suggested and added to 'To Do'.`, type: 'success' });
+            onClose();
+        } catch (error: any) {
+            setToast({ message: error.message || "Failed to suggest tasks.", type: 'error' });
+            setIsGenerating(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
+            <Card title="AI Suggest Tasks" description="Select a phase to generate relevant tasks based on its documentation." className="w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <div className="space-y-4">
+                    <div>
+                        <label htmlFor="suggest-phase" className="block text-sm font-medium">Phase</label>
+                        <select id="suggest-phase" value={selectedPhaseId} onChange={e => setSelectedPhaseId(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                            <option value="" disabled>Select a phase...</option>
+                            {project?.phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <Button type="button" variant="outline" onClick={onClose} disabled={isGenerating}>Cancel</Button>
+                        <Button onClick={handleGenerate} disabled={isGenerating || !selectedPhaseId}>
+                            {isGenerating ? <><LoaderCircle className="w-4 h-4 mr-2 animate-spin"/>Generating...</> : <><Zap className="w-4 h-4 mr-2"/>Generate Tasks</>}
+                        </Button>
+                    </div>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
 
 interface AddTaskModalProps {
     onClose: () => void;
@@ -195,6 +255,7 @@ interface TaskManagementPageProps {
 export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, setToast }) => {
     const { project, theme, setTheme, updateProject } = useProject();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
 
      useEffect(() => {
         if (!project) return;
@@ -262,16 +323,30 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, 
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Task Board</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-1">Organize, assign, and track project tasks.</p>
                 </div>
-                <Button onClick={() => setIsModalOpen(true)}>
-                    <Plus className="mr-2 w-4 h-4" /> Add Task
-                </Button>
+                <div className="flex items-center space-x-2">
+                    <Button variant="outline" onClick={() => setIsSuggestModalOpen(true)}>
+                        <Zap className="mr-2 w-4 h-4" /> AI Suggest Tasks
+                    </Button>
+                    <Button onClick={() => setIsModalOpen(true)}>
+                        <Plus className="mr-2 w-4 h-4" /> Add Task
+                    </Button>
+                </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                 {columns.map(col => (
                     <div key={col.status} className="bg-gray-100 dark:bg-charcoal-800/50 p-4 rounded-lg">
                         <h3 className="font-semibold mb-4">{col.title} ({tasks.filter(t => t.status === col.status).length})</h3>
                         <div className="space-y-4">
-                            {tasks.filter(t => t.status === col.status).map(task => (
+                            {tasks.filter(t => t.status === col.status)
+                            .sort((a, b) => {
+                                if (col.status === 'todo') {
+                                    const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+                                    const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+                                    if (dateA !== dateB) return dateA - dateB;
+                                }
+                                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                            })
+                            .map(task => (
                                 <TaskCard key={task.id} task={task} />
                             ))}
                         </div>
@@ -279,6 +354,7 @@ export const TaskManagementPage: React.FC<TaskManagementPageProps> = ({ onBack, 
                 ))}
             </div>
             {isModalOpen && <AddTaskModal onClose={() => setIsModalOpen(false)} setToast={setToast}/>}
+            {isSuggestModalOpen && <SuggestTasksModal onClose={() => setIsSuggestModalOpen(false)} setToast={setToast}/>}
         </div>
     );
 };

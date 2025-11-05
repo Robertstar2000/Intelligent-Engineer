@@ -195,7 +195,7 @@ export const generateCriticalDesignSprints = async (project: Project, phase: Pha
     const projectContext = getProjectContext(project, phase.id);
 
     const systemInstruction = getSystemInstruction(
-        `You are an expert AI engineering assistant with deep expertise in ${project.disciplines.join(', ')}. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints. Use terminology appropriate for these disciplines. The sprints must include dedicated sprints for "Design for Manufacturing and Assembly (DFMA)" and "Failure Modes and Effects Analysis (FMEA)". The final sprint in the array must ALWAYS be named 'Design Review Checklist' with a suitable description. Provide the output in a structured JSON format. The spec should be a highly detailed and verbose Markdown document. The sprint descriptions should also be detailed and comprehensive.`,
+        `You are an expert AI engineering assistant with deep expertise in ${project.disciplines.join(', ')}. Your task is to break down the "Critical Design" phase into a preliminary design specification and a series of development sprints. Use terminology appropriate for these disciplines. The sprints must include dedicated sprints for "Design for Manufacturing and Assembly (DFMA)" and "Failure Modes and Effects Analysis (FMEA)". Crucially, you must also determine and define the logical dependencies between these sprints by listing the names of prerequisite sprints in a 'dependencies' array. For example, the FMEA sprint might depend on a detailed component design sprint. The final sprint in the array must ALWAYS be named 'Design Review Checklist' with a suitable description. Provide the output in a structured JSON format. The spec should be a highly detailed and verbose Markdown document. The sprint descriptions should also be detailed and comprehensive.`,
         project.developmentMode
     );
 
@@ -753,5 +753,70 @@ export const suggestResources = async (project: Project): Promise<{ software: st
         return JSON.parse(response.text);
     } catch (e) {
         throw new Error("AI returned invalid JSON for project resources.");
+    }
+};
+
+export const generatePhaseTasks = async (project: Project, phase: Phase): Promise<{title: string, description: string, priority: 'Low' | 'Medium' | 'High', assigneeRole: string}[]> => {
+    const ai = getAi();
+    const model = selectModel({ phase });
+    const fullContext = getFullProjectContext(project);
+    const systemInstruction = `You are an expert AI project manager specializing in ${project.disciplines.join(', ')} projects. Your task is to analyze the provided project context and the specific objectives of the "${phase.name}" phase. Generate a list of 3-5 actionable tasks required to complete this phase. For each task, provide a clear title, a detailed description in markdown, a priority level, and a suggested role for the assignee (e.g., "Software Engineer", "Mechanical Engineer", "QA Tester").`;
+    const userPrompt = `## Full Project Documentation:\n${fullContext}\n\n## Current Phase: ${phase.name}\n## Phase Description: ${phase.description}\n\n## Task:\nGenerate a list of tasks for the "${phase.name}" phase in the specified JSON format.`;
+
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        priority: { type: Type.STRING, enum: ['Low', 'Medium', 'High'] },
+                        assigneeRole: { type: Type.STRING }
+                    }
+                }
+            }
+        }
+    }));
+
+    try {
+        return JSON.parse(response.text);
+    } catch (e) {
+        throw new Error("AI returned invalid JSON for task generation.");
+    }
+};
+
+
+export const generateTailoredPhaseDescriptions = async (disciplines: string[], phases: {name: string, description: string}[]): Promise<{[key: string]: string}> => {
+    const ai = getAi();
+    const model = selectModel({});
+    const systemInstruction = `You are an expert AI engineering consultant. Your task is to rewrite a series of standard engineering phase descriptions to be more specific and relevant to a project involving the following disciplines: ${disciplines.join(', ')}. The rewritten descriptions should be professional, concise (1-2 sentences), and use terminology appropriate for the given disciplines. Your output must be a single JSON object where keys are the original phase names and values are the new, tailored descriptions.`;
+    const userPrompt = `## Engineering Disciplines: ${disciplines.join(', ')}\n\n## Standard Phases to Tailor:\n${JSON.stringify(phases, null, 2)}\n\n## Task:\nRewrite the descriptions for each phase and return the result as a JSON object.`;
+    
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: phases.reduce((acc, phase) => {
+                    acc[phase.name] = { type: Type.STRING };
+                    return acc;
+                }, {})
+            }
+        }
+    }));
+
+    try {
+        return JSON.parse(response.text);
+    } catch (e) {
+        throw new Error("AI returned invalid JSON for tailored phase descriptions.");
     }
 };

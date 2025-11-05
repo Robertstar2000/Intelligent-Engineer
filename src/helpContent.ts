@@ -1,9 +1,9 @@
 
 
 export const HELP_CONTENT = `
-# Intelligent Engineering Partner - Help Guide
+# Vibe Engineering Partner - Help Guide
 
-Welcome! This guide provides everything you need to know to effectively use the Intelligent Engineering Partner for your projects.
+Welcome! This guide provides everything you need to know to effectively use the Vibe Engineering Partner for your projects.
 
 ## 1. Core Features
 
@@ -62,7 +62,7 @@ These phases require you to generate a series of distinct documents to complete 
 
 ### Understanding HMAP (Human-Mediated Agentic Process)
 
-The Intelligent Engineering Partner is built on a core philosophy called HMAP, which stands for **Human-Mediated Agentic Process**. This isn't just about having an AI write documents for you; it's a collaborative partnership where you are always in control.
+The Vibe Engineering Partner is built on a core philosophy called HMAP, which stands for **Human-Mediated Agentic Process**. This isn't just about having an AI write documents for you; it's a collaborative partnership where you are always in control.
 
 #### How it Works:
 
@@ -120,4 +120,4 @@ The term "vibe prompt" refers to a highly detailed, context-rich prompt that is 
     -   **What it is**: This generates a prompt focused on creating a functional *simulation* of your designed system, rather than production code.
     -   **How it works**: It instructs a coding AI to model the system's behavior, logic, and interactions. It directs the AI to identify key variables, define the simulation model, design a simple UI for control and visualization, and specify data logging for performance analysis (KPIs).
     -   **Value**: Simulations are invaluable for de-risking complex projects. They allow you to validate your design choices, identify potential bottlenecks, and demonstrate the system's functionality to stakeholders long before you build physical hardware or write production software. This prompt ensures the simulation is technically sound and useful for analysis.
-`;
+`

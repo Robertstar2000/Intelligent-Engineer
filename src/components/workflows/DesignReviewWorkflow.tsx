@@ -1,9 +1,10 @@
 
+
 import React from 'react';
 import { Remarkable } from 'remarkable';
 import { Check } from 'lucide-react';
 import { Button, Card } from '../ui';
-import { Phase } from '../../types';
+import { Phase, ToastMessage } from '../../types';
 
 declare const Prism: any;
 
@@ -21,9 +22,11 @@ interface WorkflowProps {
     phase: Phase;
     onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
     onPhaseComplete: () => void;
+    onGoToNext: () => void;
+    setToast: (toast: ToastMessage | null) => void;
 }
 
-export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete }: WorkflowProps) => {
+export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete, onGoToNext, setToast }: WorkflowProps) => {
     const handleChecklistChange = (itemId: string) => {
         if (!phase.designReview) return;
         const newChecklist = phase.designReview.checklist.map(item =>
@@ -38,7 +41,14 @@ export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete }: 
             updates.sprints = phase.sprints.map(s => ({ ...s, status: 'completed' }));
         }
         onUpdatePhase(phase.id, updates);
+        
+        setToast({ message: 'Design review complete! Advancing to the next phase.', type: 'success' });
+        
         onPhaseComplete();
+
+        setTimeout(() => {
+            onGoToNext();
+        }, 1500);
     };
     
     const allChecked = phase.designReview?.checklist.every(item => item.checked);

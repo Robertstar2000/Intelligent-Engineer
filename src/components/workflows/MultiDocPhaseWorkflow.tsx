@@ -4,7 +4,7 @@ import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap } from 'lucide-rea
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
 import { Project, Phase, Sprint, ToastMessage } from '../../types';
-import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel } from '../../services/geminiService';
+import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel, generateDesignReviewChecklist } from '../../services/geminiService';
 import { MarkdownEditor } from '../MarkdownEditor';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
@@ -85,30 +85,40 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         setExternalError('');
         const mergedOutput = phase.sprints.map(doc => `## ${doc.name}\n\n${doc.output || 'Not generated.'}`).join('\n\n---\n\n');
 
+        let finalUpdates: Partial<Phase> = { output: mergedOutput };
+
         if (phase.name === 'Requirements') {
             try {
                 const compactedContext = await generateCompactedContext(project, mergedOutput);
-                const updatedProject = {
-                    ...project,
-                    compactedContext: compactedContext,
-                    phases: project.phases.map((p): Phase =>
-                        p.id === phase.id
-                        ? { ...p, output: mergedOutput, status: 'in-progress' }
-                        : p
-                    )
-                };
-                onUpdateProject(updatedProject);
+                onUpdateProject({ ...project, compactedContext: compactedContext });
             } catch (error: any) {
                 setExternalError(error.message || "Failed to generate compacted project context.");
                 setIsMerging(false);
                 return;
             }
-        } else {
-            onUpdatePhase(phase.id, { output: mergedOutput, status: 'in-progress' });
         }
         
-        setIsMerging(false);
-        onPhaseComplete();
+        if (phase.designReview?.required) {
+            try {
+                const checklist = await generateDesignReviewChecklist(mergedOutput);
+                finalUpdates = {
+                    ...finalUpdates,
+                    status: 'in-review',
+                    designReview: { ...phase.designReview, checklist: checklist },
+                };
+                onUpdatePhase(phase.id, finalUpdates);
+                setToast({ message: `${phase.name} committed for review.`, type: 'success' });
+            } catch (error: any) {
+                 setExternalError(error.message || "Failed to generate design review checklist.");
+            } finally {
+                setIsMerging(false);
+            }
+        } else {
+            finalUpdates.status = 'completed';
+            onUpdatePhase(phase.id, finalUpdates);
+            setToast({ message: `${phase.name} phase completed! Advancing...`, type: 'success' });
+            setTimeout(() => onGoToNext(), 1500);
+        }
     };
     
     const handleGenerateDevSprints = async () => {

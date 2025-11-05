@@ -3,7 +3,7 @@ import { generateStandardPhaseOutput, generateDesignReviewChecklist, selectModel
 import { TuningControls } from '../TuningControls';
 import { PhaseOutput } from '../PhaseOutput';
 import { PhaseActions } from '../PhaseActions';
-import { Project, Phase } from '../../types';
+import { Project, Phase, ToastMessage } from '../../types';
 
 interface WorkflowProps {
     phase: Phase;
@@ -12,9 +12,10 @@ interface WorkflowProps {
     onPhaseComplete: () => void;
     setExternalError: (message: string) => void;
     onGoToNext: () => void;
+    setToast: (toast: ToastMessage | null) => void;
 }
 
-export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext }: WorkflowProps) => {
+export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, setToast }: WorkflowProps) => {
     const [isLoading, setIsLoading] = useState(false);
     const [tuningSettings, setTuningSettings] = useState(phase.tuningSettings);
     const modelForGeneration = selectModel({ phase, tuningSettings });
@@ -37,29 +38,25 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         setIsLoading(true);
         setExternalError('');
         
-        let updates: Partial<Phase> = { status: 'completed' };
-        
         if (phase.designReview?.required) {
             try {
                 const checklist = await generateDesignReviewChecklist(phase.output);
-                updates = {
-                    ...updates,
+                const updates: Partial<Phase> = {
                     status: 'in-review',
                     designReview: { ...phase.designReview, checklist: checklist },
                 };
+                onUpdatePhase(phase.id, updates);
+                setToast({ message: `${phase.name} committed for review.`, type: 'success' });
             } catch (error: any) {
                  setExternalError(error.message || "Failed to generate design review checklist.");
-                 setIsLoading(false);
-                 return;
+            } finally {
+                setIsLoading(false);
             }
+        } else {
+            onUpdatePhase(phase.id, { status: 'completed' });
+            setToast({ message: `${phase.name} phase completed! Advancing...`, type: 'success' });
+            setTimeout(() => onGoToNext(), 1500);
         }
-        
-        onUpdatePhase(phase.id, updates);
-        
-        if (!updates.designReview) {
-             onPhaseComplete();
-        }
-        setIsLoading(false);
     };
 
     const handleSaveOutput = (newOutput: string) => {

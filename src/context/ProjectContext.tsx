@@ -167,7 +167,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     };
 
     const login = (email: string, pass: string): boolean => {
-        const users: User[] = JSON.parse(localStorage.getItem('intelligent_engineer_users') || '[]');
+        const users: User[] = JSON.parse(localStorage.getItem('vibe_engineering_users') || '[]');
         const user = users.find(u => u.email === email);
         // This is a mock password check. In a real app, this would be a hashed password check.
         if (user) {
@@ -178,7 +178,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     };
 
     const signup = (name: string, email: string, pass: string): boolean => {
-        let users: User[] = JSON.parse(localStorage.getItem('intelligent_engineer_users') || '[]');
+        let users: User[] = JSON.parse(localStorage.getItem('vibe_engineering_users') || '[]');
         if (users.some(u => u.email === email)) {
             return false; // User already exists
         }
@@ -190,7 +190,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
             avatar: '👤' 
         };
         users.push(newUser);
-        localStorage.setItem('intelligent_engineer_users', JSON.stringify(users));
+        localStorage.setItem('vibe_engineering_users', JSON.stringify(users));
         setCurrentUser(newUser);
         return true;
     };

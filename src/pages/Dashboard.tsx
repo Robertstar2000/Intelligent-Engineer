@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-// FIX: Import LoaderCircle icon.
-import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle } from 'lucide-react';
+import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List } from 'lucide-react';
 import { Button, Card, Badge, ProgressBar } from '../components/ui';
 import { useProject } from '../context/ProjectContext';
 import { Phase, ToastMessage } from '../types';
@@ -28,6 +27,7 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
   const [editedConstraints, setEditedConstraints] = useState(project?.constraints || '');
+  const [lifecycleView, setLifecycleView] = useState<'visual' | 'list'>('visual');
   
   if (!project) return null;
 
@@ -39,10 +39,10 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
 
   const getStatusIcon = (status: Phase['status']) => {
     switch (status) {
-      case 'completed': return { icon: <CheckCircle className="w-5 h-5 text-green-500" />, color: 'text-green-500' };
-      case 'in-progress': return { icon: <Clock className="w-5 h-5 text-yellow-500" />, color: 'text-yellow-500' };
-      case 'in-review': return { icon: <Hourglass className="w-5 h-5 text-brand-primary" />, color: 'text-brand-primary' };
-      default: return { icon: <Circle className="w-5 h-5 text-gray-400" />, color: 'text-gray-400' };
+      case 'completed': return { icon: <CheckCircle className="w-5 h-5 text-green-500" />, color: 'text-green-500', bgColor: 'bg-green-100 dark:bg-green-900/50' };
+      case 'in-progress': return { icon: <Clock className="w-5 h-5 text-yellow-500" />, color: 'text-yellow-500', bgColor: 'bg-yellow-100 dark:bg-yellow-900/50' };
+      case 'in-review': return { icon: <Hourglass className="w-5 h-5 text-brand-primary" />, color: 'text-brand-primary', bgColor: 'bg-brand-primary/10 dark:bg-brand-primary/20' };
+      default: return { icon: <Circle className="w-5 h-5 text-gray-400" />, color: 'text-gray-400', bgColor: 'bg-gray-100 dark:bg-charcoal-700' };
     }
   };
 
@@ -84,31 +84,85 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-                <Card title="Project Lifecycle" description="Complete each phase sequentially to unlock the next.">
-                    <div className="space-y-4">
-                        {project.phases.map((phase, index) => {
-                            const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
-                            const isCurrent = index === firstIncompleteIndex;
-                            const isAutomatingThisPhase = phase.id === automatingPhaseId;
-                            const { icon, color } = getStatusIcon(isLocked ? 'not-started' : phase.status);
-                            
-                            return (
-                                <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
-                                    {isAutomatingThisPhase ? (
-                                        <div className="p-2 bg-blue-100 dark:bg-brand-primary/20 rounded-full text-brand-primary">
-                                            <LoaderCircle className="w-5 h-5 animate-spin" />
-                                        </div>
-                                    ) : (
-                                        <div className={`p-2 bg-gray-100 dark:bg-charcoal-700/50 rounded-full ${color}`}>{icon}</div>
-                                    )}
-                                    <div className="flex-1">
-                                        <p className="font-semibold text-gray-900 dark:text-white">{index + 1}. {phase.name}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">{phase.description}</p>
-                                    </div>
-                                    {isLocked ? <Lock className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                                </button>
-                            );
-                        })}
+                <Card noPadding>
+                    <div className="flex justify-between items-center p-6 pb-4 border-b dark:border-charcoal-700/50">
+                         <div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Project Lifecycle</h3>
+                            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Complete each phase sequentially to unlock the next.</p>
+                        </div>
+                        <div className="inline-flex rounded-md shadow-sm bg-gray-100 dark:bg-charcoal-900/50 p-1 space-x-1">
+                            <Button onClick={() => setLifecycleView('visual')} variant={lifecycleView === 'visual' ? 'secondary' : 'ghost'} size="sm" className="!px-2 !py-1">
+                                <LayoutGrid className="w-4 h-4" />
+                            </Button>
+                             <Button onClick={() => setLifecycleView('list')} variant={lifecycleView === 'list' ? 'secondary' : 'ghost'} size="sm" className="!px-2 !py-1">
+                                <List className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="p-6">
+                        {lifecycleView === 'list' ? (
+                             <div className="space-y-4">
+                                {project.phases.map((phase, index) => {
+                                    const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
+                                    const isCurrent = index === firstIncompleteIndex;
+                                    const isAutomatingThisPhase = phase.id === automatingPhaseId;
+                                    const { icon, color } = getStatusIcon(isLocked ? 'not-started' : phase.status);
+                                    
+                                    return (
+                                        <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
+                                            {isAutomatingThisPhase ? (
+                                                <div className="p-2 bg-blue-100 dark:bg-brand-primary/20 rounded-full text-brand-primary">
+                                                    <LoaderCircle className="w-5 h-5 animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <div className={`p-2 bg-gray-100 dark:bg-charcoal-700/50 rounded-full ${color}`}>{icon}</div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-gray-900 dark:text-white truncate">{index + 1}. {phase.name}</p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{phase.description}</p>
+                                            </div>
+                                            {isLocked ? <Lock className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                             <div className="flex items-center overflow-x-auto pb-4 -m-6 px-6 space-x-4">
+                                {project.phases.map((phase, index) => {
+                                    const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
+                                    const isCurrent = index === firstIncompleteIndex;
+                                    const isAutomatingThisPhase = phase.id === automatingPhaseId;
+                                    const { icon, color, bgColor } = getStatusIcon(isLocked ? 'not-started' : phase.status);
+                                    return (
+                                        <React.Fragment key={phase.id}>
+                                            <div className="flex-shrink-0 w-64">
+                                                <button
+                                                    onClick={() => onSelectPhase(index)}
+                                                    disabled={isLocked || isAutomating}
+                                                    className={`w-full h-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex flex-col justify-between ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}
+                                                >
+                                                    <div>
+                                                        <div className="flex items-center space-x-3 mb-2">
+                                                            <div className={`p-1.5 rounded-full ${bgColor} ${color}`}>
+                                                                {isAutomatingThisPhase ? <LoaderCircle className="w-5 h-5 animate-spin" /> : icon}
+                                                            </div>
+                                                            <h4 className="font-semibold text-gray-900 dark:text-white">{phase.name}</h4>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">{phase.description}</p>
+                                                    </div>
+                                                    <div className="flex justify-end items-center mt-3">
+                                                         {isLocked ? <Lock className="w-4 h-4 text-gray-400" /> : <Badge variant={phase.status === 'completed' ? 'success' : isCurrent ? 'warning' : 'default'}>{phase.status.replace('-', ' ')}</Badge>}
+                                                    </div>
+                                                </button>
+                                            </div>
+                                            {index < project.phases.length - 1 && (
+                                                <div className={`flex-shrink-0 h-1 w-12 rounded-full transition-colors duration-500 ${index < firstIncompleteIndex ? 'bg-brand-primary' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </Card>
                 <Card title="Automation Engine">

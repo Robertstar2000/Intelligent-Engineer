@@ -1,7 +1,8 @@
 
+
 # Application Logic Outline
 
-This document outlines the logical flow of the Intelligent Engineering Partner application in a human-readable format. Indentation is used to represent nesting, loops, and conditional branches.
+This document outlines the logical flow of the Vibe Engineering Partner application in a human-readable format. Indentation is used to represent nesting, loops, and conditional branches.
 
 ---
 

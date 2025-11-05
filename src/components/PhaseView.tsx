@@ -44,7 +44,9 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
             return <DesignReviewWorkflow 
                         phase={localPhase}
                         onUpdatePhase={handleUpdatePhase}
-                        onPhaseComplete={onPhaseComplete} 
+                        onPhaseComplete={onPhaseComplete}
+                        onGoToNext={onReturnToDashboard}
+                        setToast={setToast}
                    />;
         }
 
@@ -82,6 +84,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
                     onPhaseComplete={onPhaseComplete}
                     setExternalError={setGenerationError}
                     onGoToNext={onReturnToDashboard}
+                    setToast={setToast}
                />;
     };
     
@@ -101,8 +104,11 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
             {localPhase.output && localPhase.status !== 'in-review' && (
                 <DiagramCard 
                     phase={localPhase}
+                    project={project}
+                    updateProject={updateProject}
                     onUpdatePhase={handleUpdatePhase}
                     setExternalError={setGenerationError}
+                    setToast={setToast}
                 />
             )}
 

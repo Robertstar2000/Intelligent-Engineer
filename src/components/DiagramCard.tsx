@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { Image as ImageIcon, Download, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Button, Card } from './ui';
-import { Phase } from '../types';
+import { Phase, Project, MetaDocument, ToastMessage } from '../types';
 import { generateDiagram } from '../services/geminiService';
 
 interface DiagramCardProps {
     phase: Phase;
+    project: Project;
     onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
+    updateProject: (project: Project) => void;
     setExternalError: (message: string) => void;
+    setToast: (toast: ToastMessage | null) => void;
 }
 
-export const DiagramCard: React.FC<DiagramCardProps> = ({ phase, onUpdatePhase, setExternalError }) => {
+export const DiagramCard: React.FC<DiagramCardProps> = ({ phase, project, onUpdatePhase, updateProject, setExternalError, setToast }) => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleGenerate = async () => {
@@ -20,6 +23,18 @@ export const DiagramCard: React.FC<DiagramCardProps> = ({ phase, onUpdatePhase, 
         try {
             const diagramUrl = await generateDiagram(phase.output);
             onUpdatePhase(phase.id, { diagramUrl });
+
+            const newDoc: MetaDocument = {
+                id: `meta-diagram-${phase.id}-${Date.now()}`,
+                name: `${phase.name} - Visual Summary Diagram`,
+                content: diagramUrl,
+                type: 'diagram',
+                createdAt: new Date(),
+            };
+            const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
+            updateProject({ ...project, metaDocuments: updatedMetaDocs });
+            setToast({ message: 'Diagram saved to project documents.', type: 'success' });
+
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred during diagram generation.');
         } finally {
