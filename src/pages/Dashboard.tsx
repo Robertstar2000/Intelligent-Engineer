@@ -35,7 +35,7 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
   const [editedConstraints, setEditedConstraints] = useState(project?.constraints || '');
-  const [lifecycleView, setLifecycleView] = useState<'visual' | 'list'>('visual');
+  const [lifecycleView, setLifecycleView] = useState<'visual' | 'list'>('list');
   
   if (!project) return null;
 

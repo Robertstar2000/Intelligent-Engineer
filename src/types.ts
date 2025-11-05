@@ -134,7 +134,7 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log';
+  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code';
   createdAt: Date;
 }
 

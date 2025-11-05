@@ -61,7 +61,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 model: 'gemini-2.5-flash',
                 contents: userPrompt,
                 config: { systemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } } }
-            }));
+            }), 3);
             
             const impactedNames = JSON.parse(response.text);
             const docsToUpdate = allDocs
@@ -89,7 +89,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             try {
                 const doerSystemInstruction = "You are a Doer Agent. You are an expert technical writer. Your task is to edit a document based on a change request, using the full project context. Return only the complete, updated document text. Do not add any commentary.";
                 const doerUserPrompt = `Full Project Context:\n${fullContext}\n\nDocument to Edit: "${doc.name}"\n---BEGIN DOCUMENT---\n${doc.originalContent}\n---END DOCUMENT---\n\nChange Request: "${changeRequest}"\n\nRewrite the document to incorporate the change.`;
-                const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }));
+                const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
                 const newContent = doerResponse.text;
                 finalDocs[i] = { ...doc, newContent: newContent };
                 setImpactedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, newContent, status: 'validating' } : d));
@@ -97,7 +97,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 // QA AGENT
                 const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
                 const qaUserPrompt = `Change Request: "${changeRequest}"\n\nOriginal Document:\n${doc.originalContent}\n\nNew Document:\n${newContent}\n\nVerify the change.`;
-                const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }));
+                const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }), 3);
                 const qaResult = JSON.parse(qaResponse.text);
 
                 if (qaResult.approved) {

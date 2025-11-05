@@ -27,6 +27,7 @@ export const selectModel = (options: {
     const proTaskTypes = [
         'criticalSprints',         // Initial critical design
         'visualAssetOrchestrator', // All wireframes, diagrams, schematics
+        'advancedAssetOrchestrator',
     ];
     if (taskType && proTaskTypes.includes(taskType)) {
         return PRO_MODEL;
@@ -131,7 +132,7 @@ export const generateStandardPhaseOutput = async (project: Project, phase: Phase
         model,
         contents: userPrompt,
         config: { systemInstruction }
-    }));
+    }), 3);
     return response.text;
 };
 
@@ -180,7 +181,7 @@ export const generateSubDocument = async (project: Project, phase: Phase, sprint
         model,
         contents: userPrompt,
         config: { systemInstruction }
-    }));
+    }), 3);
     return response.text;
 };
 
@@ -221,7 +222,7 @@ export const generateCriticalDesignSprints = async (project: Project, phase: Pha
                 }
             }
         }
-    }));
+    }), 3);
     
     try {
         const parsedResponse = JSON.parse(response.text);
@@ -291,7 +292,7 @@ export const generateSprintSpecification = async (project: Project, phase: Phase
                 }
             }
         }
-    }));
+    }), 3);
 
     try {
         return JSON.parse(response.text);
@@ -317,7 +318,7 @@ export const generateDesignReviewChecklist = async (documentContent: string): Pr
                 items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, text: { type: Type.STRING } } }
             }
         }
-    }));
+    }), 3);
     
     try {
         const parsedChecklist = JSON.parse(response.text);
@@ -362,7 +363,7 @@ export const generateProjectSummary = async (project: Project): Promise<string> 
         model,
         contents: userPrompt,
         config: { systemInstruction }
-    }));
+    }), 3);
     return response.text;
 };
 
@@ -392,7 +393,7 @@ const generateSingleVisualAssetForPhase = async (
         model,
         contents: orchestratorUserPrompt,
         config: { systemInstruction: orchestratorSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { prompt: { type: Type.STRING }, docName: {type: Type.STRING} } } }
-    }));
+    }), 3);
     const { prompt: detailedPrompt, docName } = JSON.parse(orchestratorResponse.text);
 
     // Doer Agent
@@ -400,7 +401,7 @@ const generateSingleVisualAssetForPhase = async (
         model: 'imagen-4.0-generate-001',
         prompt: detailedPrompt,
         config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' },
-    }));
+    }), 3);
 
     if (!doerResponse.generatedImages || doerResponse.generatedImages.length === 0) throw new Error("Doer Agent failed to generate the image.");
     
@@ -553,7 +554,7 @@ export const generateDiagram = async (documentContent: string): Promise<string> 
         model,
         contents: orchestratorUserPrompt,
         config: { systemInstruction: orchestratorSystemInstruction }
-    }));
+    }), 3);
 
     const detailedPrompt = orchestratorResponse.text;
 
@@ -566,7 +567,7 @@ export const generateDiagram = async (documentContent: string): Promise<string> 
           outputMimeType: 'image/png',
           aspectRatio: '16:9',
         },
-    }));
+    }), 3);
 
     if (response.generatedImages && response.generatedImages.length > 0) {
         const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
@@ -575,7 +576,7 @@ export const generateDiagram = async (documentContent: string): Promise<string> 
     throw new Error("Failed to generate diagram image.");
 };
 
-export const generateVisualAsset = async (
+export const generateStandardVisualAsset = async (
     project: Project,
     sprint: Sprint,
     toolType: 'wireframe' | 'diagram' | 'schematic'
@@ -599,7 +600,7 @@ export const generateVisualAsset = async (
         model,
         contents: orchestratorUserPrompt,
         config: { systemInstruction: orchestratorSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { prompt: { type: Type.STRING }, docName: {type: Type.STRING} } } }
-    }));
+    }), 3);
     
     const { prompt: detailedPrompt, docName } = JSON.parse(orchestratorResponse.text);
 
@@ -612,13 +613,66 @@ export const generateVisualAsset = async (
           outputMimeType: 'image/png',
           aspectRatio: '16:9',
         },
-    }));
+    }), 3);
 
     if (!doerResponse.generatedImages || doerResponse.generatedImages.length === 0) {
         throw new Error("Doer Agent failed to generate the image.");
     }
     const base64ImageBytes: string = doerResponse.generatedImages[0].image.imageBytes;
     const content = `data:image/png;base64,${base64ImageBytes}`;
+
+    return { content, docName };
+};
+
+export const generateAdvancedAsset = async (
+    project: Project,
+    sprint: Sprint,
+    toolType: 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code'
+): Promise<{ content: string; docName: string; }> => {
+    const ai = getAi();
+    const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.output || sprint.description}`;
+    
+    const orchestratorModel = selectModel({ taskType: 'advancedAssetOrchestrator' });
+    const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed generation prompt for another AI agent (a Doer). The prompt must be descriptive and specific to the requested asset type. Respond with a JSON object containing a 'prompt' string for the Doer and a 'docName' string for the generated file.";
+    
+    const toolDescriptions: { [key in typeof toolType]: string } = {
+        'pwb-layout-svg': 'a PWB (Printed Wiring Board) layout as an SVG file. The prompt should ask for valid SVG XML code representing a simple 2-layer board with components mentioned in the sprint.',
+        '3d-image-veo': 'a short, 5-second 3D looping video of the component using VEO. The prompt should be cinematic and descriptive, focusing on materials, lighting, and slow rotation.',
+        '2d-image': 'a photorealistic 2D image of the final product in a relevant environment. The prompt should describe the scene, lighting, and materials in detail.',
+        '3d-printing-file': 'a 3D printing file in text-based STL format. The prompt should ask for valid STL code for a simplified version of the component, specifying key dimensions and features.',
+        'software-code': 'a software code file. The prompt should ask for well-commented code in an appropriate language (e.g., Python, JavaScript) to implement the core logic described in the sprint.',
+    };
+
+    const orchestratorUserPrompt = `Project & Sprint Context:\n${fullContext}\n\nTask: Create a generation prompt and a suitable document name for ${toolDescriptions[toolType]}`;
+    
+    const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model: orchestratorModel,
+        contents: orchestratorUserPrompt,
+        config: { systemInstruction: orchestratorSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { prompt: { type: Type.STRING }, docName: { type: Type.STRING } } } }
+    }), 3);
+    const { prompt: detailedPrompt, docName } = JSON.parse(orchestratorResponse.text);
+
+    let content: string;
+
+    if (toolType === '3d-image-veo') {
+        let operation = await ai.models.generateVideos({ model: 'veo-3.1-fast-generate-preview', prompt: detailedPrompt, config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' } });
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+        const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (!downloadLink) throw new Error("VEO generation failed to produce a video URI.");
+        content = downloadLink;
+    } else if (toolType === '2d-image') {
+        const doerResponse = await withRetry<GenerateImagesResponse>(() => ai.models.generateImages({ model: 'imagen-4.0-generate-001', prompt: detailedPrompt, config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' } }), 3);
+        if (!doerResponse.generatedImages || doerResponse.generatedImages.length === 0) throw new Error("Doer Agent failed to generate the image.");
+        const base64ImageBytes: string = doerResponse.generatedImages[0].image.imageBytes;
+        content = `data:image/png;base64,${base64ImageBytes}`;
+    } else {
+        const doerModel = selectModel({});
+        const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: doerModel, contents: detailedPrompt }), 3);
+        content = doerResponse.text;
+    }
 
     return { content, docName };
 };
@@ -654,7 +708,7 @@ export const assessProjectRisks = async (project: Project): Promise<Risk[]> => {
                 }
             }
         }
-    }));
+    }), 3);
     
     try {
         const risks = JSON.parse(response.text);
@@ -673,6 +727,7 @@ export type RiskWorkflowProgress = {
     error?: string;
 };
 
+// @ts-ignore
 const serializeProjectDocs = (project: Project): { id: string, name: string, content: string }[] => {
     const docs: { id: string, name: string, content: string }[] = [];
     project.phases.forEach(phase => {
@@ -712,7 +767,8 @@ export const runRiskAssessmentWorkflow = async (
             const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to identify the next most critical potential risk for the project based on the provided documents and the risks already found. Formulate a specific, focused topic for the Doer agent to investigate. Be concise.";
             const orchestratorPrompt = `Project Context:\n${projectContext}\n\nRisks Found So Far:\n${JSON.stringify(foundRisks)}\n\nIdentify the next single, most important area to investigate for a new risk.`;
             
-            const orchestratorResponse = await ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } });
+            // FIX: Explicitly type the return value of withRetry.
+            const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
             const doerTask = orchestratorResponse.text;
             onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
 
@@ -721,10 +777,11 @@ export const runRiskAssessmentWorkflow = async (
             const doerSystemInstruction = "You are a Doer Agent, an expert risk analyst. Based on the task from the orchestrator and the project context, your job is to identify and formulate a single, specific risk. You MUST provide a title, category, severity, a detailed description, and a concrete mitigation plan. Respond in a JSON object with these fields.";
             const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the risk as a JSON object.`;
             
-            const doerResponse = await ai.models.generateContent({
+            // FIX: Explicitly type the return value of withRetry.
+            const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: doerPrompt,
                 config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Technical', 'Schedule', 'Budget', 'Resource', 'Operational', 'Other'] }, severity: { type: Type.STRING, enum: ['Low', 'Medium', 'High', 'Critical'] }, description: { type: Type.STRING }, mitigation: { type: Type.STRING } } } }
-            });
+            }), 3);
             const newRiskDraft: Omit<Risk, 'id'> = JSON.parse(doerResponse.text);
 
             // --- QA ---
@@ -732,10 +789,11 @@ export const runRiskAssessmentWorkflow = async (
             const qaSystemInstruction = "You are a QA Agent. Your job is to validate the proposed risk. Is it realistic? Is the mitigation plan sensible? Based on this risk and the number of iterations, should we stop searching for more risks? A high iteration count or finding a 'Low' severity risk are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
             const qaPrompt = `Proposed Risk:\n${JSON.stringify(newRiskDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the risk and decide if the search should stop.`;
             
-            const qaResponse = await ai.models.generateContent({
+            // FIX: Explicitly type the return value of withRetry.
+            const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: qaPrompt,
                 config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
-            });
+            }), 3);
             const qaResult = JSON.parse(qaResponse.text);
 
             if (qaResult.approved) {
@@ -824,7 +882,7 @@ export const generateProjectRecommendations = async (project: Project, metrics: 
                 }
             }
         }
-    }));
+    }), 3);
     
      try {
         const recs = JSON.parse(response.text);
@@ -867,7 +925,7 @@ export const generateCompactedContext = async (project: Project, requirementsOut
         model,
         contents: userPrompt,
         config: { systemInstruction }
-    }));
+    }), 3);
     return response.text;
 };
 
@@ -898,7 +956,7 @@ export const generatePreliminaryDesignSprints = async (project: Project, concept
                 }
             }
         }
-    }));
+    }), 3);
     
     try {
         return JSON.parse(response.text);
@@ -925,7 +983,7 @@ export const suggestTeamRoles = async (project: Project): Promise<string[]> => {
                 items: { type: Type.STRING }
             }
         }
-    }));
+    }), 3);
 
     try {
         return JSON.parse(response.text);
@@ -963,7 +1021,8 @@ export const runResourceAnalysisWorkflow = async (
             const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to find required resources (software, equipment) and their sources. Based on the project documents and resources already found, identify the next most critical resource category or component to investigate. Be specific and concise.";
             const orchestratorPrompt = `Project Context:\n${projectContext}\n\nResources Found So Far:\n${JSON.stringify(foundResources)}\n\nIdentify the next single, most important resource or category to investigate.`;
             
-            const orchestratorResponse = await ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } });
+            // FIX: Explicitly type the return value of withRetry.
+            const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
             const doerTask = orchestratorResponse.text;
             onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
 
@@ -972,10 +1031,11 @@ export const runResourceAnalysisWorkflow = async (
             const doerSystemInstruction = "You are a Doer Agent, an expert engineering resource planner. Based on the task from the orchestrator and the project context, identify a single, specific resource. You MUST provide its name, a source or vendor, its category ('Software' or 'Equipment'), and a brief justification. Respond in a JSON object.";
             const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the resource as a JSON object.`;
             
-            const doerResponse = await ai.models.generateContent({
+            // FIX: Explicitly type the return value of withRetry.
+            const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: doerPrompt,
                 config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, source: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Software', 'Equipment', 'Other'] }, justification: { type: Type.STRING } } } }
-            });
+            }), 3);
             const newResourceDraft: Omit<Resource, 'id'> = JSON.parse(doerResponse.text);
 
             // --- QA ---
@@ -983,10 +1043,11 @@ export const runResourceAnalysisWorkflow = async (
             const qaSystemInstruction = "You are a QA Agent. Validate the proposed resource. Is it realistic? Is the source appropriate? Is the justification sound? Based on this and the iteration count, should we stop searching? A high iteration count or finding an obvious resource are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
             const qaPrompt = `Proposed Resource:\n${JSON.stringify(newResourceDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the resource and decide if the search should stop.`;
             
-            const qaResponse = await ai.models.generateContent({
+            // FIX: Explicitly type the return value of withRetry.
+            const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: qaPrompt,
                 config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
-            });
+            }), 3);
             const qaResult = JSON.parse(qaResponse.text);
 
             if (qaResult.approved) {
@@ -1055,7 +1116,7 @@ export const generatePhaseTasks = async (project: Project, phase: Phase): Promis
                 }
             }
         }
-    }));
+    }), 3);
 
     try {
         return JSON.parse(response.text);
@@ -1085,7 +1146,7 @@ export const generateTailoredPhaseDescriptions = async (disciplines: string[], p
                 }, {})
             }
         }
-    }));
+    }), 3);
 
     try {
         return JSON.parse(response.text);
