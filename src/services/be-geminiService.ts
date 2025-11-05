@@ -442,7 +442,7 @@ export const generatePhaseVisualAssets = async (project: Project, phase: Phase):
 };
 
 
-export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase, onUpdate: (updates: Partial<Phase>) => void, onToast: (message: string, type?: 'success' | 'error' | 'info') => void): Promise<void> => {
+export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase, onUpdate: (updates: Partial<Phase>) => void, onToast: (message: string, type?: 'success' | 'error' | 'info') => void): Promise<MetaDocument[]> => {
     let finalOutput = '';
     
     if (['Requirements', 'Preliminary Design', 'Testing'].includes(phase.name)) {
@@ -526,21 +526,19 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
     // After phase completion, generate assets
     try {
         onToast(`Generating visual assets for ${phase.name}...`);
-        const newDocs = await generatePhaseVisualAssets(project, { ...phase, ...finalPhaseState });
+        const updatedProjectForAssets = {
+            ...project,
+            phases: project.phases.map(p => p.id === phase.id ? { ...phase, ...finalPhaseState } : p)
+        };
+        const newDocs = await generatePhaseVisualAssets(updatedProjectForAssets, { ...phase, ...finalPhaseState });
         if (newDocs.length > 0) {
-            const updatedProject = {
-                ...project,
-                metaDocuments: [...(project.metaDocuments || []), ...newDocs]
-            };
-            // This is a bit tricky as we can't directly update the project state from here.
-            // The App component will have to handle adding the new docs.
-            // For now, we'll assume the onUpdate call can handle nested metaDocuments updates if needed,
-            // but the main project update will happen in the App component.
             onToast(`${newDocs.length} visual assets generated and saved.`, 'success');
+            return newDocs;
         }
     } catch (error: any) {
         onToast(`Failed to generate visual assets: ${error.message}`, 'error');
     }
+    return [];
 };
 
 export const generateDiagram = async (documentContent: string): Promise<string> => {

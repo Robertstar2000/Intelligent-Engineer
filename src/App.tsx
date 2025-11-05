@@ -113,7 +113,7 @@ export const App = () => {
                 const phase = currentProjectState.phases[phaseIndex];
                 setAutomatingPhaseId(phase.id);
 
-                await runAutomatedPhaseGeneration(
+                const newMetaDocs = await runAutomatedPhaseGeneration(
                     currentProjectState,
                     phase,
                     (updates) => {
@@ -130,6 +130,18 @@ export const App = () => {
                     },
                     (message, type = 'info') => setToast({ message, type: type as 'info' | 'success' | 'error' })
                 );
+                
+                if (newMetaDocs && newMetaDocs.length > 0) {
+                    const latestProjectState = projectStateRef.current;
+                    if (latestProjectState) {
+                        const updatedProject = {
+                            ...latestProjectState,
+                            metaDocuments: [...(latestProjectState.metaDocuments || []), ...newMetaDocs],
+                        };
+                        projectStateRef.current = updatedProject;
+                        updateProject(updatedProject);
+                    }
+                }
             }
 
             if (isAutomatingRef.current) {
