@@ -1,10 +1,9 @@
-
-
 import React from 'react';
 import { Remarkable } from 'remarkable';
 import { Check } from 'lucide-react';
 import { Button, Card } from '../ui';
-import { Phase, ToastMessage } from '../../types';
+import { Phase, ToastMessage, Project, MetaDocument } from '../../types';
+import { generatePhaseVisualAssets } from '../../services/geminiService';
 
 declare const Prism: any;
 
@@ -20,13 +19,15 @@ const md = new Remarkable({
 
 interface WorkflowProps {
     phase: Phase;
+    project: Project;
+    onUpdateProject: (updatedProject: Project) => void;
     onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
     onPhaseComplete: () => void;
     onGoToNext: () => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete, onGoToNext, setToast }: WorkflowProps) => {
+export const DesignReviewWorkflow = ({ phase, project, onUpdateProject, onUpdatePhase, onPhaseComplete, onGoToNext, setToast }: WorkflowProps) => {
     const handleChecklistChange = (itemId: string) => {
         if (!phase.designReview) return;
         const newChecklist = phase.designReview.checklist.map(item =>
@@ -35,8 +36,11 @@ export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete, on
         onUpdatePhase(phase.id, { designReview: { ...phase.designReview, checklist: newChecklist } });
     };
 
-    const handleFinalizeReview = () => {
-        const updates: Partial<Phase> = { status: 'completed' };
+    const handleFinalizeReview = async () => {
+        const updates: Partial<Phase> = { 
+            status: 'completed',
+            reviewEndDate: new Date().toISOString(),
+        };
         if (phase.sprints?.length > 0) {
             updates.sprints = phase.sprints.map(s => ({ ...s, status: 'completed' }));
         }
@@ -44,6 +48,23 @@ export const DesignReviewWorkflow = ({ phase, onUpdatePhase, onPhaseComplete, on
         
         setToast({ message: 'Design review complete! Advancing to the next phase.', type: 'success' });
         
+        if (['Preliminary Design', 'Critical Design'].includes(phase.name)) {
+            setToast({ message: `Generating visual assets for ${phase.name}...`, type: 'info' });
+            try {
+                const phaseWithOutput = { ...phase, ...updates }; 
+                const newDocs = await generatePhaseVisualAssets(project, phaseWithOutput);
+                if (newDocs.length > 0) {
+                    onUpdateProject({ 
+                        ...project, 
+                        metaDocuments: [...(project.metaDocuments || []), ...newDocs] 
+                    });
+                    setToast({ message: `${newDocs.length} assets generated and saved to Documents.`, type: 'success' });
+                }
+            } catch (error: any) {
+                setToast({ message: `Failed to generate visual assets: ${error.message}`, type: 'error' });
+            }
+        }
+
         onPhaseComplete();
 
         setTimeout(() => {

@@ -45,6 +45,7 @@ export const App = () => {
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(false);
     const isAutomatingRef = useRef(false);
+    const projectStateRef = useRef(currentProject);
     
     useEffect(() => {
         if(currentUser && currentView === 'landing'){
@@ -53,6 +54,10 @@ export const App = () => {
             setCurrentView('landing');
         }
     }, [currentUser, currentView]);
+
+    useEffect(() => {
+        projectStateRef.current = currentProject;
+    }, [currentProject]);
 
     useEffect(() => {
         if (toast) {
@@ -92,41 +97,45 @@ export const App = () => {
     };
 
     const handleAutomateProject = async () => {
-        if (!currentProject) return;
-    
+        if (!projectStateRef.current) return;
+
         setIsAutomating(true);
         isAutomatingRef.current = true;
-        let projectState = { ...currentProject };
-    
+
         try {
-            const startIndex = projectState.phases.findIndex(p => p.status !== 'completed');
-            if (startIndex === -1) {
-                setToast({ message: "Project is already complete!", type: 'success' });
-                return;
-            }
-    
-            for (let i = startIndex; i < projectState.phases.length; i++) {
-                if (!isAutomatingRef.current) {
-                    setToast({ message: 'Automation stopped by user.', type: 'info' });
-                    break;
-                }
-                const phase = projectState.phases[i];
+            while (isAutomatingRef.current && projectStateRef.current?.phases.some(p => p.status !== 'completed')) {
+                const currentProjectState = projectStateRef.current;
+                if (!currentProjectState) break;
+
+                const phaseIndex = currentProjectState.phases.findIndex(p => p.status !== 'completed');
+                if (phaseIndex === -1) break;
+
+                const phase = currentProjectState.phases[phaseIndex];
                 setAutomatingPhaseId(phase.id);
-    
+
                 await runAutomatedPhaseGeneration(
-                    projectState,
+                    currentProjectState,
                     phase,
                     (updates) => {
-                        const updatedPhases = projectState.phases.map(p => p.id === phase.id ? { ...p, ...updates } : p);
-                        projectState = { ...projectState, phases: updatedPhases };
-                        updateProject(projectState); 
+                        const latestProjectState = projectStateRef.current;
+                        if (!latestProjectState) return;
+
+                        const latestPhaseState = latestProjectState.phases.find(p => p.id === phase.id)!;
+                        const updatedPhase = { ...latestPhaseState, ...updates };
+                        const updatedPhases = latestProjectState.phases.map(p => p.id === phase.id ? updatedPhase : p);
+                        
+                        const newProjectState = { ...latestProjectState, phases: updatedPhases };
+                        projectStateRef.current = newProjectState;
+                        updateProject(newProjectState);
                     },
-                    (message) => setToast({ message, type: 'info' })
+                    (message, type = 'info') => setToast({ message, type: type as 'info' | 'success' | 'error' })
                 );
             }
+
             if (isAutomatingRef.current) {
                 setToast({ message: "Project automation complete!", type: 'success' });
             }
+
         } catch (error: any) {
             setToast({ message: `Automation failed: ${error.message}`, type: 'error' });
         } finally {

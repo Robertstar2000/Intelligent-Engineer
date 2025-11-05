@@ -2,10 +2,18 @@ import React, { useState } from 'react';
 import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List } from 'lucide-react';
 import { Button, Card, Badge, ProgressBar } from '../components/ui';
 import { useProject } from '../context/ProjectContext';
-import { Phase, ToastMessage } from '../types';
+import { Phase, Sprint, ToastMessage } from '../types';
 import { ProjectHeader } from '../components/ProjectHeader';
 import { RiskEnginePanel } from '../components/RiskEnginePanel';
 import { ChangeManagementPanel } from '../components/ChangeManagementPanel';
+
+const getSprintStatusIcon = (status: Sprint['status']) => {
+    switch (status) {
+        case 'completed': return <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />;
+        case 'in-progress': return <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />;
+        default: return <Circle className="w-4 h-4 text-gray-400 flex-shrink-0" />;
+    }
+};
 
 interface DashboardProps {
   onSelectPhase: (index: number) => void;
@@ -109,20 +117,33 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                                     const { icon, color } = getStatusIcon(isLocked ? 'not-started' : phase.status);
                                     
                                     return (
-                                        <button key={phase.id} onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
-                                            {isAutomatingThisPhase ? (
-                                                <div className="p-2 bg-blue-100 dark:bg-brand-primary/20 rounded-full text-brand-primary">
-                                                    <LoaderCircle className="w-5 h-5 animate-spin" />
+                                        <div key={phase.id}>
+                                            <button onClick={() => onSelectPhase(index)} disabled={isLocked || isAutomating} className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center space-x-4 ${isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 border-gray-200 dark:border-charcoal-700/50 cursor-not-allowed opacity-60' : `bg-white dark:bg-charcoal-800/50 border-transparent shadow-sm hover:shadow-md hover:border-brand-primary ${isCurrent ? 'ring-2 ring-brand-primary' : ''}`} ${isAutomatingThisPhase ? 'animate-pulse border-brand-primary' : ''} ${isAutomating && !isAutomatingThisPhase ? 'opacity-50 cursor-wait' : ''}`}>
+                                                {isAutomatingThisPhase ? (
+                                                    <div className="p-2 bg-blue-100 dark:bg-brand-primary/20 rounded-full text-brand-primary">
+                                                        <LoaderCircle className="w-5 h-5 animate-spin" />
+                                                    </div>
+                                                ) : (
+                                                    <div className={`p-2 bg-gray-100 dark:bg-charcoal-700/50 rounded-full ${color}`}>{icon}</div>
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-gray-900 dark:text-white truncate">{index + 1}. {phase.name}</p>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{phase.description}</p>
                                                 </div>
-                                            ) : (
-                                                <div className={`p-2 bg-gray-100 dark:bg-charcoal-700/50 rounded-full ${color}`}>{icon}</div>
+                                                {isLocked ? <Lock className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
+                                            </button>
+                                            
+                                            {phase.sprints.length > 0 && !isLocked && (
+                                                <div className="ml-8 mt-2 space-y-2 border-l-2 border-gray-200 dark:border-charcoal-700 pl-6 py-2">
+                                                    {phase.sprints.map((sprint) => (
+                                                        <div key={sprint.id} className="flex items-center space-x-3 text-sm text-gray-600 dark:text-gray-400">
+                                                            {getSprintStatusIcon(sprint.status)}
+                                                            <span className="truncate">{sprint.name}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-gray-900 dark:text-white truncate">{index + 1}. {phase.name}</p>
-                                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{phase.description}</p>
-                                            </div>
-                                            {isLocked ? <Lock className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                                        </button>
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -151,7 +172,13 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                                                         <p className="text-xs text-gray-500 dark:text-gray-400">{phase.description}</p>
                                                     </div>
                                                     <div className="flex justify-end items-center mt-3">
-                                                         {isLocked ? <Lock className="w-4 h-4 text-gray-400" /> : <Badge variant={phase.status === 'completed' ? 'success' : isCurrent ? 'warning' : 'default'}>{phase.status.replace('-', ' ')}</Badge>}
+                                                         {isLocked ? (
+                                                            <Lock className="w-4 h-4 text-gray-400" />
+                                                         ) : isAutomatingThisPhase ? (
+                                                            <Badge variant="info">Working</Badge>
+                                                         ) : (
+                                                            <Badge variant={phase.status === 'completed' ? 'success' : isCurrent ? 'warning' : 'default'}>{phase.status.replace('-', ' ')}</Badge>
+                                                         )}
                                                     </div>
                                                 </button>
                                             </div>

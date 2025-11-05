@@ -1,6 +1,5 @@
 import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 
-// FIX: Add Dispatch and SetStateAction types to resolve namespace error.
 export const useTheme = (): [string, Dispatch<SetStateAction<string>>] => {
     const [theme, setThemeState] = useState(() => {
         if (typeof window === 'undefined') return 'dark';

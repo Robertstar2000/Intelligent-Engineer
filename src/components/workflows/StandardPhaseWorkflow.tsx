@@ -44,6 +44,7 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 const updates: Partial<Phase> = {
                     status: 'in-review',
                     designReview: { ...phase.designReview, checklist: checklist },
+                    reviewStartDate: new Date().toISOString(),
                 };
                 onUpdatePhase(phase.id, updates);
                 setToast({ message: `${phase.name} committed for review.`, type: 'success' });

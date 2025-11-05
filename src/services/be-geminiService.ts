@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, GenerateContentResponse, GenerateImagesResponse } from "@google/genai";
-import { Project, Phase, Sprint, TuningSettings, DesignReviewChecklistItem, Risk, Recommendation, AnalyticsMetrics, MetaDocument } from '../types';
+import { Project, Phase, Sprint, TuningSettings, DesignReviewChecklistItem, Risk, Recommendation, AnalyticsMetrics, MetaDocument, Resource } from '../types';
 import { withRetry } from '../utils';
 
 // --- CONSTANTS ---
@@ -10,8 +10,8 @@ const FLASH_MODEL = 'gemini-2.5-flash';
 
 /**
  * Selects the appropriate AI model based on the context of the task.
- * It prioritizes the more powerful model for complex phases, specific task types,
- * or when high-quality tuning parameters are set.
+ * It prioritizes the more powerful PRO model for critical, foundational documents
+ * and visual asset generation, while using the faster FLASH model for other tasks.
  * @param options - The context for the AI task.
  * @returns The name of the model to use ('gemini-2.5-pro' or 'gemini-2.5-flash').
  */
@@ -19,34 +19,30 @@ export const selectModel = (options: {
     phase?: Phase;
     taskType?: string;
     tuningSettings?: TuningSettings;
+    sprintName?: string;
 }): string => {
-    const { phase, taskType, tuningSettings } = options;
+    const { phase, taskType, sprintName } = options;
 
-    // Rule 1: High-complexity task types always use the PRO model.
-    const proTaskTypes = ['criticalSprints', 'vibePrompt', 'riskAssessment', 'compactContext', 'recommendations'];
+    // Use PRO for specified high-stakes generation tasks
+    const proTaskTypes = [
+        'criticalSprints',         // Initial critical design
+        'visualAssetOrchestrator', // All wireframes, diagrams, schematics
+    ];
     if (taskType && proTaskTypes.includes(taskType)) {
         return PRO_MODEL;
     }
 
-    // Rule 2: High-complexity phases always use the PRO model.
-    if (phase && ['Critical Design', 'Testing', 'Preliminary Design'].includes(phase.name)) {
+    // Use PRO for all Preliminary Design documents
+    if (phase?.name === 'Preliminary Design') {
+        return PRO_MODEL;
+    }
+
+    // Use PRO for the Statement of Work (SOW)
+    if (sprintName === 'Statement of Work (SOW)') {
         return PRO_MODEL;
     }
     
-    // Rule 3: High tuning settings for technicality or depth use the PRO model.
-    const settings = tuningSettings || phase?.tuningSettings;
-    if (settings) {
-        const technicality = (settings.technicality as number) || 0;
-        const technicalDepth = (settings.technicalDepth as number) || 0;
-        const failureAnalysis = (settings.failureAnalysis as number) || 0;
-        const foresight = (settings.foresight as number) || 0;
-
-        if (technicality > 75 || technicalDepth > 75 || failureAnalysis > 75 || foresight > 75) {
-            return PRO_MODEL;
-        }
-    }
-
-    // Default to the faster FLASH model.
+    // Default to the faster FLASH model for all other tasks
     return FLASH_MODEL;
 };
 
@@ -141,7 +137,7 @@ export const generateStandardPhaseOutput = async (project: Project, phase: Phase
 
 export const generateSubDocument = async (project: Project, phase: Phase, sprint: Sprint): Promise<string> => {
     const ai = getAi();
-    const model = selectModel({ phase });
+    const model = selectModel({ phase, sprintName: sprint.name });
     
     const prompts: { [key: string]: { [key: string]: string } } = {
         'Requirements': {
@@ -370,8 +366,83 @@ export const generateProjectSummary = async (project: Project): Promise<string> 
     return response.text;
 };
 
+const generateSingleVisualAssetForPhase = async (
+    project: Project,
+    phase: Phase,
+    toolType: 'wireframe' | 'diagram' | 'schematic'
+): Promise<MetaDocument> => {
+    const ai = getAi();
+    const fullContext = getBasePromptContext(project) + `\n\n## Phase Content to Visualize:\n${phase.output}`;
 
-export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase, onUpdate: (updates: Partial<Phase>) => void, onToast: (message: string) => void): Promise<void> => {
+    const model = selectModel({ taskType: 'visualAssetOrchestrator' });
+    const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed image generation prompt for an AI model (like Imagen) to create a technical engineering asset. The prompt must be descriptive, specifying style, components, connections, and layout. Respond with a JSON object containing a 'prompt' string and a 'docName' string for the generated file.";
+    
+    const toolDescription = {
+        wireframe: 'a clean, to-scale, 3D wireframe model of the main component described. The style should be minimalist, professional, and clear, suitable for technical documentation.',
+        diagram: 'a one-page functional block diagram illustrating the system architecture and data flow. Use standard block diagram conventions, with clear labels and directional arrows.',
+        schematic: 'a simple 2D schematic diagram of the electronic circuit or mechanical assembly. Use standard symbols and a clean layout.'
+    };
+    const docBaseName = toolType === 'diagram' ? `${phase.name} - System Diagram`
+                      : toolType === 'wireframe' ? `${phase.name} - Component Wireframe`
+                      : `${phase.name} - System Schematic`;
+
+    const orchestratorUserPrompt = `Project & Phase Context:\n${fullContext}\n\nTask: Create an image generation prompt and a suitable document name for ${toolDescription[toolType]}. The document name should be based on "${docBaseName}".`;
+    
+    const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: orchestratorUserPrompt,
+        config: { systemInstruction: orchestratorSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { prompt: { type: Type.STRING }, docName: {type: Type.STRING} } } }
+    }));
+    const { prompt: detailedPrompt, docName } = JSON.parse(orchestratorResponse.text);
+
+    // Doer Agent
+    const doerResponse = await withRetry<GenerateImagesResponse>(() => ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: detailedPrompt,
+        config: { numberOfImages: 1, outputMimeType: 'image/png', aspectRatio: '16:9' },
+    }));
+
+    if (!doerResponse.generatedImages || doerResponse.generatedImages.length === 0) throw new Error("Doer Agent failed to generate the image.");
+    
+    const base64ImageBytes: string = doerResponse.generatedImages[0].image.imageBytes;
+    const content = `data:image/png;base64,${base64ImageBytes}`;
+
+    return {
+        id: `meta-asset-${phase.id}-${toolType}-${Date.now()}`,
+        name: docName,
+        content: content,
+        type: toolType,
+        createdAt: new Date(),
+    };
+};
+
+export const generatePhaseVisualAssets = async (project: Project, phase: Phase): Promise<MetaDocument[]> => {
+    if (!phase.output) return [];
+
+    const assetPromises: Promise<MetaDocument | null>[] = [];
+    const phaseName = phase.name;
+    const disciplines = project.disciplines.map(d => d.toLowerCase());
+
+    if (['Preliminary Design', 'Critical Design', 'Testing', 'Launch', 'Operation'].includes(phaseName)) {
+        assetPromises.push(generateSingleVisualAssetForPhase(project, phase, 'diagram'));
+    }
+
+    if (['Preliminary Design', 'Critical Design'].includes(phaseName)) {
+        const hasMechanical = disciplines.some(d => ['mechanical', 'aerospace', 'automotive', 'civil', 'structural', 'marine', 'robotics'].some(keyword => d.includes(keyword)));
+        const hasElectricalOrSoftware = disciplines.some(d => ['electrical', 'electronics', 'software', 'systems'].some(keyword => d.includes(keyword)));
+        if (hasMechanical) {
+            assetPromises.push(generateSingleVisualAssetForPhase(project, phase, 'wireframe'));
+        } else if (hasElectricalOrSoftware) {
+            assetPromises.push(generateSingleVisualAssetForPhase(project, phase, 'schematic'));
+        }
+    }
+  
+    const newDocs = await Promise.all(assetPromises);
+    return newDocs.filter((doc): doc is MetaDocument => !!doc);
+};
+
+
+export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase, onUpdate: (updates: Partial<Phase>) => void, onToast: (message: string, type?: 'success' | 'error' | 'info') => void): Promise<void> => {
     let finalOutput = '';
     
     if (['Requirements', 'Preliminary Design', 'Testing'].includes(phase.name)) {
@@ -433,33 +504,65 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
         onUpdate({ output, status: 'in-progress' });
     }
 
+    let finalPhaseState: Partial<Phase> = { output: finalOutput };
+
     if (phase.designReview?.required) {
         onToast('Generating design review checklist...');
         if (finalOutput) {
             const checklist = await generateDesignReviewChecklist(finalOutput);
-            onUpdate({ status: 'in-review', designReview: { ...phase.designReview, checklist: checklist } });
+             finalPhaseState = { ...finalPhaseState, status: 'in-review', designReview: { ...phase.designReview, checklist: checklist } };
+            onUpdate(finalPhaseState);
             onToast('Design review generated. Auto-completing...');
-            onUpdate({ status: 'completed' });
+            finalPhaseState = { ...finalPhaseState, status: 'completed' };
         } else {
-             onUpdate({ status: 'completed' });
+             finalPhaseState = { ...finalPhaseState, status: 'completed' };
         }
     } else {
-        onUpdate({ status: 'completed' });
+        finalPhaseState = { ...finalPhaseState, status: 'completed' };
+    }
+    
+    onUpdate(finalPhaseState);
+
+    // After phase completion, generate assets
+    try {
+        onToast(`Generating visual assets for ${phase.name}...`);
+        const newDocs = await generatePhaseVisualAssets(project, { ...phase, ...finalPhaseState });
+        if (newDocs.length > 0) {
+            const updatedProject = {
+                ...project,
+                metaDocuments: [...(project.metaDocuments || []), ...newDocs]
+            };
+            // This is a bit tricky as we can't directly update the project state from here.
+            // The App component will have to handle adding the new docs.
+            // For now, we'll assume the onUpdate call can handle nested metaDocuments updates if needed,
+            // but the main project update will happen in the App component.
+            onToast(`${newDocs.length} visual assets generated and saved.`, 'success');
+        }
+    } catch (error: any) {
+        onToast(`Failed to generate visual assets: ${error.message}`, 'error');
     }
 };
 
 export const generateDiagram = async (documentContent: string): Promise<string> => {
     const ai = getAi();
-    const prompt = `Create a professional and clear technical diagram (such as a block diagram, flowchart, or system architecture diagram) that visually summarizes the key concepts, components, and relationships described in the following engineering document. The diagram should be easy to understand for a technical audience and use a clean, modern aesthetic. Avoid excessive text; use labels sparingly.
+    
+    // Orchestrator Agent to create a detailed prompt for the image generator
+    const model = selectModel({ taskType: 'visualAssetOrchestrator' });
+    const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed image generation prompt for an AI model (like Imagen) to create a technical engineering diagram. The prompt must be descriptive, specifying style (e.g., 'professional block diagram', 'clean flowchart'), components, connections, and layout based on the provided text.";
+    const orchestratorUserPrompt = `Document Content to Summarize:\n---\n${documentContent}\n---\n\nTask: Create an image generation prompt for a technical diagram that visually summarizes the key concepts in the document.`;
 
-    Document Content to Summarize:
-    ---
-    ${documentContent}`;
+    const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: orchestratorUserPrompt,
+        config: { systemInstruction: orchestratorSystemInstruction }
+    }));
 
-    // FIX: Add generic type to withRetry to ensure correct type inference for the response.
+    const detailedPrompt = orchestratorResponse.text;
+
+    // Doer Agent (Image Generator)
     const response = await withRetry<GenerateImagesResponse>(() => ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
-        prompt: prompt,
+        prompt: detailedPrompt,
         config: {
           numberOfImages: 1,
           outputMimeType: 'image/png',
@@ -483,6 +586,7 @@ export const generateVisualAsset = async (
     const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.output || sprint.description}`;
 
     // 1. Orchestrator Agent
+    const model = selectModel({ taskType: 'visualAssetOrchestrator' });
     const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed image generation prompt for an AI model (like Imagen) to create a technical engineering asset. The prompt must be descriptive, specifying style, components, connections, and layout. Respond with a JSON object containing a 'prompt' string and a 'docName' string for the generated file.";
 
     const toolDescription = {
@@ -494,7 +598,7 @@ export const generateVisualAsset = async (
     const orchestratorUserPrompt = `Project & Sprint Context:\n${fullContext}\n\nTask: Create an image generation prompt and a suitable document name for ${toolDescription[toolType]}`;
     
     const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model,
         contents: orchestratorUserPrompt,
         config: { systemInstruction: orchestratorSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { prompt: { type: Type.STRING }, docName: {type: Type.STRING} } } }
     }));
@@ -517,12 +621,6 @@ export const generateVisualAsset = async (
     }
     const base64ImageBytes: string = doerResponse.generatedImages[0].image.imageBytes;
     const content = `data:image/png;base64,${base64ImageBytes}`;
-
-    // 3. QA Agent (Simplified for this implementation)
-    const qaResult = { approved: true, feedback: "Asset meets sprint requirements." };
-    if (!qaResult.approved) {
-        throw new Error(`QA Agent rejected the asset: ${qaResult.feedback}`);
-    }
 
     return { content, docName };
 };
@@ -567,6 +665,118 @@ export const assessProjectRisks = async (project: Project): Promise<Risk[]> => {
     } catch (e) {
         throw new Error("AI returned invalid JSON for risk assessment.");
     }
+};
+
+export type RiskWorkflowProgress = {
+    currentAgent: 'Orchestrator' | 'Doer' | 'QA' | 'Done' | 'Error';
+    iteration: number;
+    logMessage: string;
+    newRisk?: Risk;
+    error?: string;
+};
+
+const serializeProjectDocs = (project: Project): { id: string, name: string, content: string }[] => {
+    const docs: { id: string, name: string, content: string }[] = [];
+    project.phases.forEach(phase => {
+        if (phase.output) {
+            docs.push({ id: `phase-${phase.id}`, name: phase.name, content: phase.output });
+        }
+        phase.sprints.forEach(sprint => {
+            if (sprint.output) {
+                docs.push({ id: `sprint-${sprint.id}`, name: `${phase.name} / ${sprint.name}`, content: sprint.output });
+            }
+        });
+    });
+    return docs;
+};
+
+export const runRiskAssessmentWorkflow = async (
+    project: Project,
+    onProgress: (progress: RiskWorkflowProgress) => void
+): Promise<{ finalRisks: Risk[], logDocument: MetaDocument }> => {
+    const ai = getAi();
+    const model = FLASH_MODEL;
+    const maxIterations = 25;
+    
+    const allDocs = serializeProjectDocs(project).filter(doc => {
+        const docExt = doc.name.split('.').pop()?.toLowerCase();
+        return docExt !== 'png';
+    });
+    const projectContext = allDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join('\n\n');
+
+    let foundRisks: Risk[] = [];
+    let riskLogContent = `# AI Risk Assessment Log for ${project.name}\n\n`;
+
+    for (let i = 1; i <= maxIterations; i++) {
+        try {
+            // --- ORCHESTRATOR ---
+            onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: 'Identifying next area of concern...' });
+            const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to identify the next most critical potential risk for the project based on the provided documents and the risks already found. Formulate a specific, focused topic for the Doer agent to investigate. Be concise.";
+            const orchestratorPrompt = `Project Context:\n${projectContext}\n\nRisks Found So Far:\n${JSON.stringify(foundRisks)}\n\nIdentify the next single, most important area to investigate for a new risk.`;
+            
+            const orchestratorResponse = await ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } });
+            const doerTask = orchestratorResponse.text;
+            onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
+
+            // --- DOER ---
+            onProgress({ currentAgent: 'Doer', iteration: i, logMessage: 'Investigating and formulating risk...' });
+            const doerSystemInstruction = "You are a Doer Agent, an expert risk analyst. Based on the task from the orchestrator and the project context, your job is to identify and formulate a single, specific risk. You MUST provide a title, category, severity, a detailed description, and a concrete mitigation plan. Respond in a JSON object with these fields.";
+            const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the risk as a JSON object.`;
+            
+            const doerResponse = await ai.models.generateContent({
+                model, contents: doerPrompt,
+                config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Technical', 'Schedule', 'Budget', 'Resource', 'Operational', 'Other'] }, severity: { type: Type.STRING, enum: ['Low', 'Medium', 'High', 'Critical'] }, description: { type: Type.STRING }, mitigation: { type: Type.STRING } } } }
+            });
+            const newRiskDraft: Omit<Risk, 'id'> = JSON.parse(doerResponse.text);
+
+            // --- QA ---
+            onProgress({ currentAgent: 'QA', iteration: i, logMessage: 'Validating formulated risk...' });
+            const qaSystemInstruction = "You are a QA Agent. Your job is to validate the proposed risk. Is it realistic? Is the mitigation plan sensible? Based on this risk and the number of iterations, should we stop searching for more risks? A high iteration count or finding a 'Low' severity risk are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
+            const qaPrompt = `Proposed Risk:\n${JSON.stringify(newRiskDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the risk and decide if the search should stop.`;
+            
+            const qaResponse = await ai.models.generateContent({
+                model, contents: qaPrompt,
+                config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
+            });
+            const qaResult = JSON.parse(qaResponse.text);
+
+            if (qaResult.approved) {
+                const approvedRisk: Risk = { ...newRiskDraft, id: `risk-${Date.now()}` };
+                foundRisks.push(approvedRisk);
+                riskLogContent += `\n## ✅ Iteration ${i}: ${approvedRisk.title} (${approvedRisk.severity})\n- **Description**: ${approvedRisk.description}\n- **Mitigation**: ${approvedRisk.mitigation}\n`;
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: `Risk "${approvedRisk.title}" approved.`, newRisk: approvedRisk });
+            } else {
+                riskLogContent += `\n## ❌ Iteration ${i}: Risk Rejected\n- **Reason**: ${qaResult.feedback}\n`;
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: `Risk rejected: ${qaResult.feedback}` });
+            }
+
+            if (qaResult.shouldStop) {
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: 'QA Agent determined workflow should stop.' });
+                riskLogContent += "\n--- WORKFLOW COMPLETE (QA Decision) ---";
+                break;
+            }
+        } catch (error: any) {
+            const errorMessage = error.message || "An agent failed in its task.";
+            onProgress({ currentAgent: 'Error', iteration: i, logMessage: errorMessage, error: errorMessage });
+            riskLogContent += `\n## 🛑 Iteration ${i}: Workflow Error\n- **Details**: ${errorMessage}\n`;
+            throw new Error(errorMessage);
+        }
+
+        if (i === maxIterations) {
+            riskLogContent += "\n--- WORKFLOW COMPLETE (Max Iterations Reached) ---";
+        }
+    }
+    
+    const logDocument: MetaDocument = {
+        id: `meta-risklog-${Date.now()}`,
+        name: `${project.name} - Risk Assessment Log`,
+        content: riskLogContent,
+        type: 'risk-assessment-log',
+        createdAt: new Date(),
+    };
+
+    onProgress({ currentAgent: 'Done', iteration: maxIterations, logMessage: 'Workflow finished.' });
+    return { finalRisks: foundRisks, logDocument };
 };
 
 export const queryProjectData = async (project: Project, query: string): Promise<string> => {
@@ -726,39 +936,104 @@ export const suggestTeamRoles = async (project: Project): Promise<string[]> => {
     }
 };
 
-export const suggestResources = async (project: Project): Promise<{ software: string[], equipment: string[] }> => {
-    const ai = getAi();
-    const model = selectModel({});
-    const fullContext = getFullProjectContext(project);
-    const systemInstruction = `You are an expert AI engineering consultant specializing in ${project.disciplines.join(', ')} projects. Analyze the provided project documentation to identify all required software tools and physical equipment. For software, list specific applications (e.g., 'SolidWorks', 'MATLAB', 'Altium Designer'). For equipment, list specific hardware (e.g., 'Oscilloscope', '3D Printer', 'CNC Mill'). Return a JSON object with two keys: 'software' and 'equipment', each containing an array of unique strings.`;
-    const userPrompt = `## Full Project Documentation:\n${fullContext}\n\n## Task:\nIdentify the required software and equipment and provide the analysis in the specified JSON format.`;
-
-    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
-        model,
-        contents: userPrompt,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    software: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    equipment: { type: Type.ARRAY, items: { type: Type.STRING } }
-                }
-            }
-        }
-    }));
-
-    try {
-        return JSON.parse(response.text);
-    } catch (e) {
-        throw new Error("AI returned invalid JSON for project resources.");
-    }
+export type ResourceWorkflowProgress = {
+    currentAgent: 'Orchestrator' | 'Doer' | 'QA' | 'Done' | 'Error';
+    iteration: number;
+    logMessage: string;
+    newResource?: Resource;
+    error?: string;
 };
+
+export const runResourceAnalysisWorkflow = async (
+    project: Project,
+    onProgress: (progress: ResourceWorkflowProgress) => void
+): Promise<{ finalResources: Resource[], logDocument: MetaDocument }> => {
+    const ai = getAi();
+    const model = FLASH_MODEL;
+    const maxIterations = 25;
+    
+    const allDocs = serializeProjectDocs(project).filter(doc => !doc.name.toLowerCase().endsWith('.png'));
+    const projectContext = allDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join('\n\n');
+
+    let foundResources: Resource[] = [];
+    let logContent = `# AI Resource Analysis Log for ${project.name}\n\n`;
+
+    for (let i = 1; i <= maxIterations; i++) {
+        try {
+            // --- ORCHESTRATOR ---
+            onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: 'Identifying next resource to investigate...' });
+            const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to find required resources (software, equipment) and their sources. Based on the project documents and resources already found, identify the next most critical resource category or component to investigate. Be specific and concise.";
+            const orchestratorPrompt = `Project Context:\n${projectContext}\n\nResources Found So Far:\n${JSON.stringify(foundResources)}\n\nIdentify the next single, most important resource or category to investigate.`;
+            
+            const orchestratorResponse = await ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } });
+            const doerTask = orchestratorResponse.text;
+            onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
+
+            // --- DOER ---
+            onProgress({ currentAgent: 'Doer', iteration: i, logMessage: 'Searching for resource and source...' });
+            const doerSystemInstruction = "You are a Doer Agent, an expert engineering resource planner. Based on the task from the orchestrator and the project context, identify a single, specific resource. You MUST provide its name, a source or vendor, its category ('Software' or 'Equipment'), and a brief justification. Respond in a JSON object.";
+            const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the resource as a JSON object.`;
+            
+            const doerResponse = await ai.models.generateContent({
+                model, contents: doerPrompt,
+                config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, source: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Software', 'Equipment', 'Other'] }, justification: { type: Type.STRING } } } }
+            });
+            const newResourceDraft: Omit<Resource, 'id'> = JSON.parse(doerResponse.text);
+
+            // --- QA ---
+            onProgress({ currentAgent: 'QA', iteration: i, logMessage: 'Validating found resource...' });
+            const qaSystemInstruction = "You are a QA Agent. Validate the proposed resource. Is it realistic? Is the source appropriate? Is the justification sound? Based on this and the iteration count, should we stop searching? A high iteration count or finding an obvious resource are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
+            const qaPrompt = `Proposed Resource:\n${JSON.stringify(newResourceDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the resource and decide if the search should stop.`;
+            
+            const qaResponse = await ai.models.generateContent({
+                model, contents: qaPrompt,
+                config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
+            });
+            const qaResult = JSON.parse(qaResponse.text);
+
+            if (qaResult.approved) {
+                const approvedResource: Resource = { ...newResourceDraft, id: `resource-${Date.now()}` };
+                foundResources.push(approvedResource);
+                logContent += `\n## ✅ Iteration ${i}: ${approvedResource.name} (${approvedResource.category})\n- **Source**: ${approvedResource.source}\n- **Justification**: ${approvedResource.justification}\n`;
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: `Resource "${approvedResource.name}" approved.`, newResource: approvedResource });
+            } else {
+                logContent += `\n## ❌ Iteration ${i}: Resource Rejected\n- **Reason**: ${qaResult.feedback}\n`;
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: `Resource rejected: ${qaResult.feedback}` });
+            }
+
+            if (qaResult.shouldStop) {
+                onProgress({ currentAgent: 'QA', iteration: i, logMessage: 'QA Agent determined workflow should stop.' });
+                logContent += "\n--- WORKFLOW COMPLETE (QA Decision) ---";
+                break;
+            }
+        } catch (error: any) {
+            const errorMessage = error.message || "An agent failed in its task.";
+            onProgress({ currentAgent: 'Error', iteration: i, logMessage: errorMessage, error: errorMessage });
+            logContent += `\n## 🛑 Iteration ${i}: Workflow Error\n- **Details**: ${errorMessage}\n`;
+            throw new Error(errorMessage);
+        }
+
+        if (i === maxIterations) {
+            logContent += "\n--- WORKFLOW COMPLETE (Max Iterations Reached) ---";
+        }
+    }
+    
+    const logDocument: MetaDocument = {
+        id: `meta-resourcelog-${Date.now()}`,
+        name: `${project.name} - Resource Analysis Log`,
+        content: logContent,
+        type: 'resource-analysis-log',
+        createdAt: new Date(),
+    };
+
+    onProgress({ currentAgent: 'Done', iteration: maxIterations, logMessage: 'Workflow finished.' });
+    return { finalResources: foundResources, logDocument };
+};
+
 
 export const generatePhaseTasks = async (project: Project, phase: Phase): Promise<{title: string, description: string, priority: 'Low' | 'Medium' | 'High', assigneeRole: string}[]> => {
     const ai = getAi();
-    const model = selectModel({ phase });
+    const model = selectModel({ phase, taskType: 'taskGeneration' });
     const fullContext = getFullProjectContext(project);
     const systemInstruction = `You are an expert AI project manager specializing in ${project.disciplines.join(', ')} projects. Your task is to analyze the provided project context and the specific objectives of the "${phase.name}" phase. Generate a list of 3-5 actionable tasks required to complete this phase. For each task, provide a clear title, a detailed description in markdown, a priority level, and a suggested role for the assignee (e.g., "Software Engineer", "Mechanical Engineer", "QA Tester").`;
     const userPrompt = `## Full Project Documentation:\n${fullContext}\n\n## Current Phase: ${phase.name}\n## Phase Description: ${phase.description}\n\n## Task:\nGenerate a list of tasks for the "${phase.name}" phase in the specified JSON format.`;

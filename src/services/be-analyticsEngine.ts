@@ -30,8 +30,26 @@ export const calculateProjectMetrics = (project: Project): AnalyticsMetrics => {
     const sprintsPerWeek = (completedSprints / timeElapsedDays) * 7;
     const industrySprintVelocityBenchmark = 3.5; // sprints per week
 
-    // Mocking this metric
-    const designReviewEfficiency = 1.2; // days per review
+    // Calculate Design Review Time from real data
+    const reviewedPhases = phases.filter(p => p.reviewStartDate && p.reviewEndDate);
+    let totalReviewDays = 0;
+    if (reviewedPhases.length > 0) {
+        totalReviewDays = reviewedPhases.reduce((acc, p) => {
+            // Non-null assertion is safe due to the filter above
+            const startDate = new Date(p.reviewStartDate!).getTime();
+            const endDate = new Date(p.reviewEndDate!).getTime();
+            const diffMs = endDate - startDate;
+            // Convert ms to days
+            const diffDays = diffMs / (1000 * 60 * 60 * 24);
+            return acc + diffDays;
+        }, 0);
+    }
+    
+    // Use the calculated average, or a default value if no reviews are complete yet.
+    const designReviewEfficiency = reviewedPhases.length > 0
+        ? parseFloat((totalReviewDays / reviewedPhases.length).toFixed(1))
+        : 1.2;
+        
     const industryDesignReviewBenchmark = 2.0; // days
     
     return {

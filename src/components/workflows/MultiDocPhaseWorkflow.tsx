@@ -105,6 +105,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                     ...finalUpdates,
                     status: 'in-review',
                     designReview: { ...phase.designReview, checklist: checklist },
+                    reviewStartDate: new Date().toISOString(),
                 };
                 onUpdatePhase(phase.id, finalUpdates);
                 setToast({ message: `${phase.name} committed for review.`, type: 'success' });

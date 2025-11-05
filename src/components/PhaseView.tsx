@@ -43,6 +43,8 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
         if (localPhase.status === 'in-review') {
             return <DesignReviewWorkflow 
                         phase={localPhase}
+                        project={project}
+                        onUpdateProject={updateProject}
                         onUpdatePhase={handleUpdatePhase}
                         onPhaseComplete={onPhaseComplete}
                         onGoToNext={onReturnToDashboard}

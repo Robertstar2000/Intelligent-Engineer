@@ -56,6 +56,8 @@ export interface Phase {
     checklist: DesignReviewChecklistItem[];
   };
   chatLog?: Message[];
+  reviewStartDate?: string;
+  reviewEndDate?: string;
 }
 
 export interface User {
@@ -81,6 +83,14 @@ export interface Risk {
   severity: 'Low' | 'Medium' | 'High' | 'Critical';
   description: string;
   mitigation: string;
+}
+
+export interface Resource {
+  id: string;
+  name: string;
+  source: string;
+  category: 'Software' | 'Equipment' | 'Other';
+  justification: string;
 }
 
 export interface AnalyticsMetrics {
@@ -124,7 +134,7 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic';
+  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log';
   createdAt: Date;
 }
 
@@ -146,6 +156,7 @@ export interface Project {
     [phaseId: string]: Comment[];
   };
   risks?: Risk[];
+  resources?: Resource[];
   analytics?: AnalyticsMetrics;
   recommendations?: Recommendation[];
   tasks?: Task[];
