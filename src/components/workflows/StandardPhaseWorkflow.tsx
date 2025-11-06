@@ -91,7 +91,7 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 onGenerate={handleGenerate}
                 onSave={handleSaveOutput}
                 isLoading={isLoading}
-                isEditable={phase.isEditable && phase.status !== 'completed'}
+                isEditable={phase.isEditable}
                 apiKey={process.env.API_KEY || null}
                 modelName={modelForGeneration}
             />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2 } from 'lucide-react';
+// fix: Add Eye to lucide-react imports
+import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2, FlaskConical, Eye } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { Project, Phase, ToastMessage, MetaDocument, Message } from '../types';
@@ -35,12 +36,13 @@ const downloadFile = (filename: string, content: string, mimeType: string) => {
 const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedContent, setEditedContent] = useState('');
-    
-    const isVisualAsset = document && ['diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '2d-image'].includes(document.type);
-    const isVideoAsset = document && document.type === '3d-image-veo';
-    const is3dFile = document && document.type === '3d-printing-file';
-    const isCodeFile = document && document.type === 'software-code';
-    const isReadOnly = document && document.type === 'Chat Log';
+
+    const documentType = document?.type || 'unknown';
+    const isVisualAsset = document && ['Diagram', 'Wireframe', 'Schematic', 'PWB Layout (SVG)', '2D Image', 'Chemical Formula (SVG)'].includes(documentType);
+    const isVideoAsset = document && documentType === '3D Video (VEO)';
+    const is3dFile = document && documentType === '3D Print File (STL)';
+    const isCodeFile = document && documentType === 'Software Code';
+    const isReadOnly = document && (documentType === 'Chat Log' || isVisualAsset || isVideoAsset || is3dFile || isCodeFile);
 
     useEffect(() => {
         if (isOpen && document) {
@@ -50,10 +52,10 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
     }, [isOpen, document]);
 
     useEffect(() => {
-        if (isOpen && !isEditing && document?.content && !isVisualAsset && !isVideoAsset && !is3dFile) {
+        if (isOpen && !isEditing && document?.content && (isCodeFile || (!isVisualAsset && !isVideoAsset && !is3dFile))) {
             setTimeout(() => Prism.highlightAll(), 0);
         }
-    }, [isOpen, isEditing, document, isVisualAsset, isVideoAsset, is3dFile]);
+    }, [isOpen, isEditing, document, isCodeFile, isVisualAsset, isVideoAsset, is3dFile]);
     
     if (!isOpen || !document) return null;
 
@@ -72,6 +74,10 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
         if (is3dFile) {
             return <div className="p-4 flex-grow flex items-center justify-center bg-gray-100 dark:bg-charcoal-900/50 text-center"><div className="p-6 border-2 border-dashed rounded-lg dark:border-gray-600"><Printer className="w-12 h-12 mx-auto text-gray-400"/><h3 className="mt-2 font-semibold">3D Print File</h3><p className="text-sm text-gray-500">Preview not available for .stl files.</p></div></div>;
         }
+        if (isCodeFile && !isEditing) {
+             const language = 'javascript'; // Defaulting to JS, can be improved with metadata
+             return <div className="p-1 flex-grow overflow-auto bg-gray-50 dark:bg-charcoal-900/50"><pre className="!bg-transparent !p-4"><code className={`language-${language}`}>{document.content}</code></pre></div>;
+        }
         if (isEditing) {
             return <div className="p-1 flex-grow"><MarkdownEditor value={editedContent} onChange={setEditedContent} /></div>;
         }
@@ -89,7 +95,7 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
                 <div className="flex items-center justify-between p-4 border-b dark:border-charcoal-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">{document.name}</h2>
                     <div className="flex items-center space-x-2">
-                        {!isVisualAsset && !isVideoAsset && !is3dFile && !isReadOnly && (
+                        {!isReadOnly && (
                             isEditing ? (
                                 <Button size="sm" onClick={handleSave}><Save className="w-4 h-4 mr-2" />Save</Button>
                             ) : (
@@ -112,14 +118,15 @@ const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const assetTypes: { [key: string]: { ext: string, mime: string, label: string, isBinary?: boolean } } = {
-        'diagram': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
-        'wireframe': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
-        'schematic': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
-        '2d-image': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
-        'pwb-layout-svg': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
-        '3d-image-veo': { ext: 'mp4', mime: 'video/mp4', label: 'Video (.mp4)', isBinary: true },
-        '3d-printing-file': { ext: 'stl', mime: 'model/stl', label: 'STL (.stl)' },
-        'software-code': { ext: 'js', mime: 'text/javascript', label: 'Code (.js)' }
+        'Diagram': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'Wireframe': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'Schematic': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        '2D Image': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'PWB Layout (SVG)': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
+        'Chemical Formula (SVG)': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
+        '3D Video (VEO)': { ext: 'mp4', mime: 'video/mp4', label: 'Video (.mp4)', isBinary: true },
+        '3D Print File (STL)': { ext: 'stl', mime: 'model/stl', label: 'STL (.stl)' },
+        'Software Code': { ext: 'js', mime: 'text/javascript', label: 'Code (.js)' }
     };
 
     const isAsset = Object.keys(assetTypes).includes(documentType);
@@ -129,7 +136,7 @@ const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
             const assetInfo = assetTypes[documentType];
             const filename = `${sanitizeFilename(documentName)}.${assetInfo.ext}`;
             if (assetInfo.isBinary) {
-                if (documentType === '3d-image-veo') {
+                if (documentType === '3D Video (VEO)') {
                     const response = await fetch(`${documentContent}&key=${process.env.API_KEY}`);
                     const blob = await response.blob();
                     downloadFile(filename, URL.createObjectURL(blob), assetInfo.mime);
@@ -279,6 +286,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 } else {
                      const extMap = {
                         'pwb-layout-svg': 'svg',
+                        'chemical-formula': 'svg',
                         '3d-printing-file': 'stl',
                         'software-code': 'js',
                     };
@@ -444,9 +452,9 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
     (project.metaDocuments || []).forEach(doc => {
         const typeMap = {
             'executive-summary': 'Summary', 'code-vibe-prompt': 'Vibe Prompt', 'simulation-vibe-prompt': 'Vibe Prompt',
-            'diagram': 'Diagram', 'wireframe': '3D Wireframe', 'schematic': 'Schematic',
+            'diagram': 'Diagram', 'wireframe': 'Wireframe', 'schematic': 'Schematic',
             'pwb-layout-svg': 'PWB Layout (SVG)', '3d-image-veo': '3D Video (VEO)', '2d-image': '2D Image',
-            '3d-printing-file': '3D Print File (STL)', 'software-code': 'Software Code'
+            '3d-printing-file': '3D Print File (STL)', 'software-code': 'Software Code', 'chemical-formula': 'Chemical Formula (SVG)',
         };
         allDocuments.push({ id: doc.id, name: doc.name, content: doc.content, type: typeMap[doc.type] || doc.type });
     });
@@ -454,10 +462,11 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
     const getIconForType = (type: string) => {
         const iconMap: { [key: string]: React.ReactNode } = {
             'Diagram': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
-            '3D Wireframe': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'Wireframe': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
             'Schematic': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
             '2D Image': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
             'PWB Layout (SVG)': <CircuitBoard className="w-5 h-5 text-green-500 flex-shrink-0" />,
+            'Chemical Formula (SVG)': <FlaskConical className="w-5 h-5 text-indigo-500 flex-shrink-0" />,
             '3D Video (VEO)': <Video className="w-5 h-5 text-purple-500 flex-shrink-0" />,
             '3D Print File (STL)': <Printer className="w-5 h-5 text-gray-500 flex-shrink-0" />,
             'Software Code': <Code2 className="w-5 h-5 text-blue-500 flex-shrink-0" />,
@@ -515,10 +524,10 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                                 </div>
                             </div>
                              <div className="flex items-center space-x-2 flex-shrink-0">
-                                <Button size="sm" variant="outline" onClick={() => setEditingDocument({ ...doc, type: allDocuments.find(d => d.id === doc.id)?.type || 'unknown' })}>
-                                    <Edit3 className="mr-2 w-4 h-4" /> View / Edit
+                                <Button size="sm" variant="outline" onClick={() => setEditingDocument(doc)}>
+                                    <Eye className="mr-2 w-4 h-4" /> View
                                 </Button>
-                                <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={allDocuments.find(d => d.id === doc.id)?.type || 'unknown'} />
+                                <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={doc.type} />
                             </div>
                         </div>
                     )) : (

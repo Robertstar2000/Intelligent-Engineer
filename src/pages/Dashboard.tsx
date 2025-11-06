@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List } from 'lucide-react';
+import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List, PlayCircle, PauseCircle } from 'lucide-react';
 import { Button, Card, Badge, ProgressBar } from '../components/ui';
 import { useProject } from '../context/ProjectContext';
 import { Phase, Sprint, ToastMessage } from '../types';
@@ -15,6 +15,8 @@ const getSprintStatusIcon = (status: Sprint['status']) => {
     }
 };
 
+type AutomationStatus = 'idle' | 'running' | 'paused' | 'error' | 'complete';
+
 interface DashboardProps {
   onSelectPhase: (index: number) => void;
   onViewDocuments: () => void;
@@ -23,19 +25,20 @@ interface DashboardProps {
   onViewTasks: () => void;
   onViewIntegrations: () => void;
   onExitProject: () => void;
-  isAutomating: boolean;
+  automationStatus: AutomationStatus;
   automatingPhaseId: string | null;
   onRunAutomation: () => void;
   onStopAutomation: () => void;
   isCollaborationPanelOpen: boolean;
   setToast: (toast: ToastMessage | null) => void;
 }
-export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, isAutomating, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
+export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, automationStatus, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
   const { project, theme, setTheme, updateProjectDetails } = useProject();
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
   const [editedConstraints, setEditedConstraints] = useState(project?.constraints || '');
   const [lifecycleView, setLifecycleView] = useState<'visual' | 'list'>('list');
+  const isAutomating = automationStatus === 'running';
   
   if (!project) return null;
 
@@ -60,6 +63,33 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
   const totalSprints = project.phases.reduce((acc, p) => acc + p.sprints.length, 0);
   const completedSprints = project.phases.reduce((acc, p) => acc + p.sprints.filter(s => s.status === 'completed').length, 0);
   const sprintProgress = totalSprints > 0 ? (completedSprints / totalSprints) * 100 : 0;
+
+  const renderAutomationControls = () => {
+    const statusMap = {
+      idle: { text: "Run Full Automation", icon: <Rocket className="mr-2 w-4 h-4" />, action: onRunAutomation, variant: "primary", disabled: false },
+      running: { text: "Pause Automation", icon: <PauseCircle className="mr-2 w-4 h-4" />, action: onStopAutomation, variant: "danger", disabled: false },
+      paused: { text: "Resume Automation", icon: <PlayCircle className="mr-2 w-4 h-4" />, action: onRunAutomation, variant: "primary", disabled: false },
+      error: { text: "Resume Automation", icon: <PlayCircle className="mr-2 w-4 h-4" />, action: onRunAutomation, variant: "primary", disabled: false },
+      complete: { text: "Automation Complete", icon: <CheckCircle className="mr-2 w-4 h-4" />, action: () => {}, variant: "primary", disabled: true },
+    };
+    const current = statusMap[automationStatus];
+    return (
+      <Card title="Automation Engine">
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {automationStatus === 'idle' && "Automatically generate all remaining project phases sequentially."}
+            {automationStatus === 'running' && "Automation is in progress. You can pause it at any time."}
+            {automationStatus === 'paused' && "Automation is paused. You can resume to continue from where it left off."}
+            {automationStatus === 'error' && "Automation was stopped due to an error. You can resume to try again."}
+            {automationStatus === 'complete' && "All project phases have been completed."}
+          </p>
+          <Button onClick={current.action} variant={current.variant as any} disabled={current.disabled} className="w-full">
+            {current.icon} {current.text}
+          </Button>
+        </div>
+      </Card>
+    );
+  };
   
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -192,20 +222,8 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                         )}
                     </div>
                 </Card>
-                <Card title="Automation Engine">
-                     <div className="space-y-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Automatically generate all remaining project phases sequentially.</p>
-                        {isAutomating ? (
-                             <Button onClick={onStopAutomation} variant="danger" className="w-full">
-                                <XCircle className="mr-2 w-4 h-4" /> Stop Automation
-                            </Button>
-                        ) : (
-                            <Button onClick={onRunAutomation} disabled={projectProgress === 100} className="w-full">
-                                <Rocket className="mr-2 w-4 h-4" /> Run Full Automation
-                            </Button>
-                        )}
-                    </div>
-                </Card>
+                {renderAutomationControls()}
+                <RiskEnginePanel />
                 <ChangeManagementPanel setToast={setToast} />
             </div>
             <div className="space-y-6">
@@ -233,7 +251,6 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                         </div>
                     </div>
                 </Card>
-                <RiskEnginePanel />
                 <Card title="Project Details">
                     {isEditingDetails ? (
                         <div className="space-y-4 text-sm">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2 } from 'lucide-react';
+import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2, FlaskConical } from 'lucide-react';
 import { Project, Sprint, ToastMessage, MetaDocument } from '../types';
 import { Button, Card, Badge } from './ui';
 import { generateStandardVisualAsset, generateAdvancedAsset } from '../services/geminiService';
@@ -56,7 +56,7 @@ interface ToolIntegrationProps {
 
 type AgentStatus = 'idle' | 'orchestrating' | 'generating' | 'generating-video' | 'qa' | 'complete' | 'error';
 type StandardToolType = 'wireframe' | 'diagram' | 'schematic';
-type AdvancedToolType = 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code';
+type AdvancedToolType = 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula';
 
 export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, project, onUpdateProject, setToast }) => {
     const [agentStatus, setAgentStatus] = useState<AgentStatus>('idle');
@@ -165,7 +165,7 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
         
         const content = (
             <div className="mt-2 p-2 bg-gray-50 dark:bg-charcoal-900/50 border dark:border-gray-700 rounded-lg max-h-64 overflow-y-auto">
-                {['wireframe', 'schematic', 'diagram', '2d-image', 'pwb-layout-svg'].includes(generatedAsset.type) && (
+                {['wireframe', 'schematic', 'diagram', '2d-image', 'pwb-layout-svg', 'chemical-formula'].includes(generatedAsset.type) && (
                     <img src={generatedAsset.content} alt={generatedAsset.name} className="rounded-md w-full object-contain"/>
                 )}
                 {generatedAsset.type === '3d-image-veo' && (
@@ -200,6 +200,44 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
         );
     };
 
+    const DISCIPLINE_TOOL_MAPPING: { [key: string]: string[] } = {
+        'Software Engineering': ['diagram', 'software-code'],
+        'Mechanical Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Aerospace Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Civil Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Electrical Engineering': ['diagram', 'schematic', 'pwb-layout-svg', '2d-image'],
+        'Biomedical Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula'],
+        'Chemical Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
+        'Environmental Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
+        'Robotics Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Systems Engineering': ['diagram', 'software-code'],
+        'Materials Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
+        'Agricultural Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula']
+    };
+    
+    const getVisibleTools = (disciplines: string[]): Set<string> => {
+        if (!disciplines || disciplines.length === 0) {
+            return new Set(['diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
+        }
+
+        const visibleTools = new Set<string>();
+        const mappingKeys = Object.keys(DISCIPLINE_TOOL_MAPPING);
+
+        disciplines.forEach(discipline => {
+            const key = mappingKeys.find(k => discipline.startsWith(k));
+            if (key) {
+                DISCIPLINE_TOOL_MAPPING[key].forEach(tool => visibleTools.add(tool));
+            }
+        });
+
+        if (visibleTools.size === 0) {
+            return new Set(['diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
+        }
+        return visibleTools;
+    };
+    
+    const visibleTools = getVisibleTools(project.disciplines);
+
     return (
         <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
              <h5 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">AI Toolkit</h5>
@@ -210,14 +248,15 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
                 </div>
              ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('wireframe')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>3D Wireframe</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('diagram')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Block Diagram</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('schematic')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Schematic</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('pwb-layout-svg')} disabled={agentStatus !== 'idle'}><CircuitBoard className="w-4 h-4 mr-2"/>PWB Layout (SVG)</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-image-veo')} disabled={agentStatus !== 'idle'}><Film className="w-4 h-4 mr-2"/>3D Video (VEO)</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('2d-image')} disabled={agentStatus !== 'idle'}><ImageIcon className="w-4 h-4 mr-2"/>2D Image</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-printing-file')} disabled={agentStatus !== 'idle'}><Printer className="w-4 h-4 mr-2"/>3D Print File (STL)</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleGenerate('software-code')} disabled={agentStatus !== 'idle'}><Code2 className="w-4 h-4 mr-2"/>Software Code</Button>
+                     {visibleTools.has('wireframe') && <Button size="sm" variant="outline" onClick={() => handleGenerate('wireframe')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>3D Wireframe</Button>}
+                     {visibleTools.has('diagram') && <Button size="sm" variant="outline" onClick={() => handleGenerate('diagram')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Block Diagram</Button>}
+                     {visibleTools.has('schematic') && <Button size="sm" variant="outline" onClick={() => handleGenerate('schematic')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Schematic</Button>}
+                     {visibleTools.has('pwb-layout-svg') && <Button size="sm" variant="outline" onClick={() => handleGenerate('pwb-layout-svg')} disabled={agentStatus !== 'idle'}><CircuitBoard className="w-4 h-4 mr-2"/>PWB Layout (SVG)</Button>}
+                     {visibleTools.has('3d-image-veo') && <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-image-veo')} disabled={agentStatus !== 'idle'}><Film className="w-4 h-4 mr-2"/>3D Video (VEO)</Button>}
+                     {visibleTools.has('2d-image') && <Button size="sm" variant="outline" onClick={() => handleGenerate('2d-image')} disabled={agentStatus !== 'idle'}><ImageIcon className="w-4 h-4 mr-2"/>2D Image</Button>}
+                     {visibleTools.has('3d-printing-file') && <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-printing-file')} disabled={agentStatus !== 'idle'}><Printer className="w-4 h-4 mr-2"/>3D Print File (STL)</Button>}
+                     {visibleTools.has('software-code') && <Button size="sm" variant="outline" onClick={() => handleGenerate('software-code')} disabled={agentStatus !== 'idle'}><Code2 className="w-4 h-4 mr-2"/>Software Code</Button>}
+                     {visibleTools.has('chemical-formula') && <Button size="sm" variant="outline" onClick={() => handleGenerate('chemical-formula')} disabled={agentStatus !== 'idle'}><FlaskConical className="w-4 h-4 mr-2"/>Chemical Formula</Button>}
                 </div>
              )}
         </div>

@@ -23,6 +23,7 @@ import { Toast } from './components/Toast';
 import { AuthModal } from './components/AuthModal';
 import { ProjectHeader } from './components/ProjectHeader';
 
+type AutomationStatus = 'idle' | 'running' | 'paused' | 'error' | 'complete';
 
 export const App = () => {
     const { 
@@ -39,12 +40,12 @@ export const App = () => {
     const [selectedPhaseIndex, setSelectedPhaseIndex] = useState<number | null>(null);
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [isNlpQueryOpen, setIsNlpQueryOpen] = useState(false);
-    const [isAutomating, setIsAutomating] = useState(false);
+    const [automationStatus, setAutomationStatus] = useState<AutomationStatus>('idle');
     const [automatingPhaseId, setAutomatingPhaseId] = useState<string | null>(null);
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(false);
-    const isAutomatingRef = useRef(false);
+    const automationController = useRef(new AbortController());
     const projectStateRef = useRef(currentProject);
     
     useEffect(() => {
@@ -57,6 +58,12 @@ export const App = () => {
 
     useEffect(() => {
         projectStateRef.current = currentProject;
+        if (currentProject) {
+            const isComplete = currentProject.phases.every(p => p.status === 'completed');
+            if (isComplete) {
+                setAutomationStatus('complete');
+            }
+        }
     }, [currentProject]);
 
     useEffect(() => {
@@ -99,27 +106,43 @@ export const App = () => {
     const handleAutomateProject = async () => {
         if (!projectStateRef.current) return;
 
-        setIsAutomating(true);
-        isAutomatingRef.current = true;
+        automationController.current = new AbortController();
+        const { signal } = automationController.current;
 
-        try {
-            while (isAutomatingRef.current && projectStateRef.current?.phases.some(p => p.status !== 'completed')) {
-                const currentProjectState = projectStateRef.current;
-                if (!currentProjectState) break;
+        setAutomationStatus('running');
+        setToast({ message: "Project automation started.", type: 'info' });
 
-                const phaseIndex = currentProjectState.phases.findIndex(p => p.status !== 'completed');
-                if (phaseIndex === -1) break;
+        const failedPhaseIds = new Set<string>();
 
-                const phase = currentProjectState.phases[phaseIndex];
-                setAutomatingPhaseId(phase.id);
+        while (!signal.aborted) {
+            const currentProjectState = projectStateRef.current;
+            if (!currentProjectState) break;
 
+            const phaseIndex = currentProjectState.phases.findIndex(p => p.status !== 'completed' && !failedPhaseIds.has(p.id));
+            if (phaseIndex === -1) {
+                if(failedPhaseIds.size > 0) {
+                     setToast({ message: "Automation finished, but some phases failed and were skipped.", type: 'info' });
+                     setAutomationStatus('error');
+                } else {
+                     setToast({ message: "Project automation complete!", type: 'success' });
+                     setAutomationStatus('complete');
+                }
+                break;
+            }
+
+            const phase = currentProjectState.phases[phaseIndex];
+            setAutomatingPhaseId(phase.id);
+            setToast({ message: `Automating phase: ${phase.name}...`, type: 'info' });
+
+            try {
                 const newMetaDocs = await runAutomatedPhaseGeneration(
                     currentProjectState,
                     phase,
                     (updates) => {
+                        if (signal.aborted) return;
                         const latestProjectState = projectStateRef.current;
                         if (!latestProjectState) return;
-
+                        
                         const latestPhaseState = latestProjectState.phases.find(p => p.id === phase.id)!;
                         const updatedPhase = { ...latestPhaseState, ...updates };
                         const updatedPhases = latestProjectState.phases.map(p => p.id === phase.id ? updatedPhase : p);
@@ -128,7 +151,10 @@ export const App = () => {
                         projectStateRef.current = newProjectState;
                         updateProject(newProjectState);
                     },
-                    (message, type = 'info') => setToast({ message, type: type as 'info' | 'success' | 'error' })
+                    (message, type = 'info') => {
+                        if (signal.aborted) return;
+                        setToast({ message, type: type as 'info' | 'success' | 'error' })
+                    }
                 );
                 
                 if (newMetaDocs && newMetaDocs.length > 0) {
@@ -142,26 +168,23 @@ export const App = () => {
                         updateProject(updatedProject);
                     }
                 }
+            } catch (error: any) {
+                if (signal.aborted) break;
+                setToast({ message: `Skipping phase "${phase.name}" due to an error. It can be completed manually.`, type: 'error' });
+                failedPhaseIds.add(phase.id);
             }
-
-            if (isAutomatingRef.current) {
-                setToast({ message: "Project automation complete!", type: 'success' });
-            }
-
-        } catch (error: any) {
-            setToast({ message: `Automation failed: ${error.message}`, type: 'error' });
-        } finally {
-            setIsAutomating(false);
-            setAutomatingPhaseId(null);
-            isAutomatingRef.current = false;
         }
+        
+        if (signal.aborted) {
+            setToast({ message: 'Automation paused by user.', type: 'info' });
+            setAutomationStatus('paused');
+        }
+
+        setAutomatingPhaseId(null);
     };
     
     const handleStopAutomation = () => {
-        isAutomatingRef.current = false;
-        setIsAutomating(false);
-        setAutomatingPhaseId(null);
-        setToast({ message: 'Automation stopped.', type: 'info' });
+        automationController.current.abort();
     };
 
     const renderContent = () => {
@@ -185,7 +208,7 @@ export const App = () => {
                 return <Dashboard 
                     onSelectPhase={handleSelectPhase}
                     onExitProject={handleExitProject}
-                    isAutomating={isAutomating}
+                    automationStatus={automationStatus}
                     automatingPhaseId={automatingPhaseId}
                     onRunAutomation={handleAutomateProject}
                     onStopAutomation={handleStopAutomation}

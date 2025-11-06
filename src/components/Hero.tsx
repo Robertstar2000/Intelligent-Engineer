@@ -13,6 +13,12 @@ export const Hero = ({ onLoginClick }) => {
           An AI-powered companion guiding you through the full engineering lifecycle. Generate your first three foundational documents to build a strong base. Then, choose your workflow: continue manually, generating and reviewing each document, or engage the Automation Engine to draft the entire project for you to refine.
         </p>
 
+        <div className="max-w-3xl mx-auto my-8 p-4 bg-yellow-400/10 border border-yellow-400/30 rounded-lg">
+            <p className="text-yellow-200">
+                This application is designed to interact with a human designer. It is required that you review and edit the result before use. It will help you greatly accelerate the time required to do a design from months to days.
+            </p>
+        </div>
+
         <div className="mt-12 mb-10 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="flex flex-col items-center text-center">
                 <GitBranch className="w-10 h-10 text-brand-primary mb-3" />

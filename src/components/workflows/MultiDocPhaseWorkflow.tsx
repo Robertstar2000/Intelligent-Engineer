@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Remarkable } from 'remarkable';
-import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap } from 'lucide-react';
+import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap, RotateCcw } from 'lucide-react';
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
 import { Project, Phase, Sprint, ToastMessage } from '../../types';
@@ -195,7 +195,6 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                     onChange={(e) => handleUpdateSprint(doc.id, { notes: e.target.value })}
                                     className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-charcoal-700 dark:border-gray-600 focus:ring-brand-primary focus:border-brand-primary"
                                     rows={2}
-                                    disabled={doc.status === 'completed'}
                                 />
                             </div>
                             <ToolIntegration
@@ -228,7 +227,14 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                         </div>
                                     ) : (
                                         <>
-                                             <div className="flex justify-end mb-2">
+                                             <div className="flex justify-end mb-2 space-x-2">
+                                                <Button variant="outline" size="sm" onClick={() => handleGenerateSubDocument(doc.id)} disabled={loadingDocId !== null}>
+                                                    {loadingDocId === doc.id ? (
+                                                        <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
+                                                    ) : (
+                                                        <><RotateCcw className="mr-2 w-4 h-4" />Regenerate</>
+                                                    )}
+                                                </Button>
                                                 <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output || ''); }}>
                                                     <Edit3 className="mr-2 w-4 h-4" />Edit
                                                 </Button>

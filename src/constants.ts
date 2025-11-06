@@ -10,6 +10,13 @@ export const ENGINEERING_DISCIPLINES = [
 
 export const PROJECT_TEMPLATES = [
     {
+        name: 'Custom Template',
+        description: 'Start with a blank slate and provide your own high-level, cryptic concept for the AI to build upon.',
+        icon: '✍️',
+        requirements: '', // Intentionally blank
+        constraints: '' // Intentionally blank
+    },
+    {
         name: 'Software Engineering (Web App)',
         description: 'An agile template for developing a modern web application, focusing on user stories, APIs, and cloud deployment.',
         icon: '💻',

@@ -14,10 +14,11 @@ interface ProjectWizardProps {
 export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   const { currentUser, addProject } = useProject();
   const [step, setStep] = useState(1);
-  const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[] });
+  const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[], customConcept: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
   const [hasInteracted, setHasInteracted] = useState({ requirements: false, constraints: false });
+  const [selectedTemplateName, setSelectedTemplateName] = useState('');
   const [requirementsTuning, setRequirementsTuning] = useState({
       clarity: 70,
       technicality: 60,
@@ -109,12 +110,19 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Select a template to pre-populate your project with a starting point.</p>
                  <div className="space-y-3 max-h-96 overflow-y-auto p-1">
                     {PROJECT_TEMPLATES.map(template => (
-                        <button key={template.name} type="button" onClick={() => {
-                            setProjectData(p => ({...p, description: template.description, requirements: template.requirements, constraints: template.constraints}));
-                            setHasInteracted({ requirements: false, constraints: false });
-                            nextStep();
-                        }}
-                        className="w-full text-left p-4 rounded-lg border-2 border-transparent hover:border-brand-primary bg-gray-50 dark:bg-charcoal-800/50 hover:bg-white dark:hover:bg-charcoal-800 shadow-sm transition-all"
+                        <button key={template.name} type="button" 
+                            onClick={() => {
+                                setSelectedTemplateName(template.name);
+                                setProjectData(p => ({
+                                    ...p, 
+                                    description: template.description, 
+                                    requirements: template.requirements, 
+                                    constraints: template.constraints, 
+                                    customConcept: ''
+                                }));
+                                setHasInteracted({ requirements: false, constraints: false });
+                            }}
+                            className={`w-full text-left p-4 rounded-lg border-2 bg-gray-50 dark:bg-charcoal-800/50 shadow-sm transition-all ${selectedTemplateName === template.name ? 'border-brand-primary ring-2 ring-brand-primary' : 'border-transparent hover:border-brand-primary/50'}`}
                         >
                             <div className="flex items-start space-x-4">
                                 <div className="text-2xl mt-1">{template.icon}</div>
@@ -126,6 +134,20 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
                         </button>
                     ))}
                  </div>
+                 {selectedTemplateName === 'Custom Template' && (
+                    <div className="mt-4 p-4 border-t dark:border-charcoal-700">
+                        <label htmlFor="customConcept" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Custom Project Concept</label>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Enter a high-level or cryptic concept for the AI to expand upon.</p>
+                        <textarea 
+                            id="customConcept" 
+                            rows={4}
+                            value={projectData.customConcept}
+                            onChange={e => setProjectData(p => ({...p, customConcept: e.target.value}))}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
+                            placeholder="e.g., 'A decentralized network for real-time environmental monitoring using IoT sensors and blockchain for data integrity.'"
+                        />
+                    </div>
+                )}
             </div>
           )}
           {step === 2 && (
@@ -213,7 +235,16 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
         {step < 6 && (
             <div className="flex justify-between mt-8 p-6 pt-0 -m-6 mb-0">
               <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
-              <Button onClick={step === 5 ? createProject : nextStep} disabled={(step === 2 && !projectData.name) || (step === 5 && projectData.disciplines.length === 0)}>{step === 5 ? 'Create Project' : 'Next'}</Button>
+              <Button 
+                onClick={step === 5 ? createProject : nextStep} 
+                disabled={
+                    (step === 1 && (!selectedTemplateName || (selectedTemplateName === 'Custom Template' && !projectData.customConcept.trim()))) ||
+                    (step === 2 && !projectData.name) || 
+                    (step === 5 && projectData.disciplines.length === 0)
+                }
+              >
+                {step === 5 ? 'Create Project' : 'Next'}
+              </Button>
             </div>
         )}
       </Card>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, Check, FileText, LoaderCircle, Sparkles, X } from 'lucide-react';
+import { Bot, Check, FileText, LoaderCircle, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { Project, Phase, Sprint, ToastMessage } from '../types';
@@ -67,6 +67,13 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             const docsToUpdate = allDocs
                 .filter(d => impactedNames.includes(d.name))
                 .map(d => ({ id: d.id, name: d.name, status: 'pending' as DocumentStatus, originalContent: d.content }));
+            
+            if (docsToUpdate.length === 0) {
+                setToast({ message: "Orchestrator found no documents impacted by this change.", type: 'info' });
+                setAgentStatus('complete');
+                return;
+            }
+
             setImpactedDocs(docsToUpdate);
             setAgentStatus('doing');
             handleApplyChanges(docsToUpdate, allDocs);
@@ -113,12 +120,6 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 setError(`Failed on document: ${doc.name}. ` + err.message);
                 setAgentStatus('error');
                 return;
-            }
-            
-            // Add a delay before processing the next document to avoid rate limiting.
-            if (i < finalDocs.length - 1) {
-                setToast({ message: `Processing complete for ${finalDocs[i].name}. Cooling down before next document...`, type: 'info' });
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
             }
         }
         
@@ -180,7 +181,14 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                         <p className="text-sm font-semibold">Change Request:</p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">{changeRequest}</p>
                     </div>
-                    {agentStatus === 'orchestrating' && <div className="flex items-center text-sm"><LoaderCircle className="w-4 h-4 animate-spin mr-2"/>Orchestrator is analyzing impact...</div>}
+
+                    <div className="p-2 text-sm bg-yellow-100 dark:bg-yellow-900/50 rounded-md flex items-start space-x-2 text-yellow-800 dark:text-yellow-300">
+                        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0"/>
+                        <span>Note: This process only updates text documents. Please manually review any related diagrams or visual assets.</span>
+                    </div>
+
+                    {agentStatus === 'orchestrating' && <div className="flex items-center text-sm p-2"><LoaderCircle className="w-4 h-4 animate-spin mr-2"/>Orchestrator is analyzing impact...</div>}
+                    
                     {impactedDocs.length > 0 && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-semibold">Impacted Documents:</h4>

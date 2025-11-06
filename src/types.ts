@@ -134,7 +134,7 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code';
+  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula';
   createdAt: Date;
 }
 
@@ -162,6 +162,7 @@ export interface Project {
   tasks?: Task[];
   compactedContext?: string;
   metaDocuments?: MetaDocument[];
+  customConcept?: string;
 }
 
 export interface ToastMessage {

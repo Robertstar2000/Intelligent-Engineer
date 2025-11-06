@@ -8,6 +8,8 @@ const FLASH_MODEL = 'gemini-2.5-flash';
 
 // --- UTILITIES ---
 
+const toCamelCase = (s: string) => s.toLowerCase().replace(/[^a-zA-Z0-9]+(.)?/g, (m, chr) => chr ? chr.toUpperCase() : '');
+
 /**
  * Selects the appropriate AI model based on the context of the task.
  * It prioritizes the more powerful PRO model for critical, foundational documents
@@ -21,30 +23,20 @@ export const selectModel = (options: {
     tuningSettings?: TuningSettings;
     sprintName?: string;
 }): string => {
-    const { phase, taskType, sprintName } = options;
+    const { taskType } = options;
 
-    // Use PRO for specified high-stakes generation tasks
-    const proTaskTypes = [
-        'criticalSprints',         // Initial critical design
-        'visualAssetOrchestrator', // All wireframes, diagrams, schematics
-        'advancedAssetOrchestrator',
+    // Use FLASH for quick, non-critical, or real-time query tasks.
+    const flashTasks = [
+        'projectSetup', // Fast setup
+        'query',        // Fast response for NLP queries
     ];
-    if (taskType && proTaskTypes.includes(taskType)) {
-        return PRO_MODEL;
-    }
 
-    // Use PRO for all Preliminary Design documents
-    if (phase?.name === 'Preliminary Design') {
-        return PRO_MODEL;
-    }
-
-    // Use PRO for the Statement of Work (SOW)
-    if (sprintName === 'Statement of Work (SOW)') {
-        return PRO_MODEL;
+    if (taskType && flashTasks.includes(taskType)) {
+        return FLASH_MODEL;
     }
     
-    // Default to the faster FLASH model for all other tasks
-    return FLASH_MODEL;
+    // Default to the more capable PRO model for all content generation and analysis tasks.
+    return PRO_MODEL;
 };
 
 
@@ -57,11 +49,17 @@ const getAi = (): GoogleGenAI => {
 };
 
 const getBasePromptContext = (project: Project): string => {
-    return `## Project: ${project.name}
+    let context = `## Project: ${project.name}
 ### Development Mode: ${project.developmentMode}
 ### Disciplines: ${project.disciplines.join(', ')}
 ### Requirements:\n${project.requirements}
 ### Constraints:\n${project.constraints}`;
+
+    if (project.customConcept) {
+        context += `\n### Custom Guiding Concept:\n${project.customConcept}`;
+    }
+
+    return context;
 };
 
 const getProjectContext = (project: Project, currentPhaseId: string): string => {
@@ -142,7 +140,7 @@ export const generateSubDocument = async (project: Project, phase: Phase, sprint
     
     const prompts: { [key: string]: { [key: string]: string } } = {
         'Requirements': {
-            'Project Scope': "Generate a professional Project Scope document...",
+            'Project Scope': "Generate a professional Project Scope document. The document must begin with an 'Introduction', immediately followed by a 'Project Objectives' section. Base the content on the project's core details, guiding concept, and disciplines.",
             'Statement of Work (SOW)': "Generate a formal Statement of Work (SOW)...",
             'Technical Requirements Specification': "Generate a detailed Technical Requirements Specification document...",
         },
@@ -175,7 +173,10 @@ export const generateSubDocument = async (project: Project, phase: Phase, sprint
     );
 
     const userNotes = sprint.notes ? `\n\n## User-Provided Notes for this Document (Incorporate these specific intents):\n${sprint.notes}` : '';
-    const userPrompt = `${baseContext}\n${projectContext}\n${subPhaseContext}\n\n---\n\n## Task:\nGenerate the **${sprint.name}** document for the **${phase.name}** phase as a highly detailed and verbose technical document based on the prompt below:\n"${specificPrompt}"${userNotes}\n\n## Tuning Parameters:\n${JSON.stringify(phase.tuningSettings)}\n\nUse terminology appropriate for the specified engineering disciplines. Finally, at the very end of the document, add a '## Validation' section containing a single specific goal for this document and a short checklist (3-5 items) to verify the goal has been met.`;
+    const attachmentSummary = sprint.attachments && sprint.attachments.length > 0
+        ? `\n\n## Attached File Summaries (Note: you cannot see the file contents, only this summary. Use this as context.):\n${sprint.attachments.map(att => `- ${att.name} (${att.mimeType})`).join('\n')}`
+        : '';
+    const userPrompt = `${baseContext}\n${projectContext}\n${subPhaseContext}\n\n---\n\n## Task:\nGenerate the **${sprint.name}** document for the **${phase.name}** phase as a highly detailed and verbose technical document based on the prompt below:\n"${specificPrompt}"${userNotes}${attachmentSummary}\n\n## Tuning Parameters:\n${JSON.stringify(phase.tuningSettings)}\n\nUse terminology appropriate for the specified engineering disciplines. Finally, at the very end of the document, add a '## Validation' section containing a single specific goal for this document and a short checklist (3-5 items) to verify the goal has been met.`;
 
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
         model,
@@ -276,7 +277,10 @@ export const generateSprintSpecification = async (project: Project, phase: Phase
     const systemInstruction = getSystemInstruction(baseInstruction, project.developmentMode);
 
     const userNotes = sprint.notes ? `\n\n## User-Provided Notes for this Sprint (Incorporate these specific intents):\n${sprint.notes}` : '';
-    const userPrompt = `## Context:\n${sprintContext}\n\n---\n\n## Current Sprint: ${sprint.name}\nDescription: ${sprint.description}\n\n## Task:\nGenerate the exceptionally detailed and verbose technical specification and a list of specific deliverables in JSON format. Use terminology appropriate for the specified engineering disciplines.\n\n## Tuning Parameters:\n${JSON.stringify(phase.tuningSettings)}\n${userNotes}\n\nFor the 'technicalSpec' field, ensure that at the very end of the markdown content, you add a '## Validation' section containing a single specific goal for this sprint and a short checklist (3-5 items) to verify the goal has been met.`;
+    const attachmentSummary = sprint.attachments && sprint.attachments.length > 0
+        ? `\n\n## Attached File Summaries (Note: you cannot see the file contents, only this summary. Use this as context.):\n${sprint.attachments.map(att => `- ${att.name} (${att.mimeType})`).join('\n')}`
+        : '';
+    const userPrompt = `## Context:\n${sprintContext}\n\n---\n\n## Current Sprint: ${sprint.name}\nDescription: ${sprint.description}\n\n## Task:\nGenerate the exceptionally detailed and verbose technical specification and a list of specific deliverables in JSON format. Use terminology appropriate for the specified engineering disciplines.\n\n## Tuning Parameters:\n${JSON.stringify(phase.tuningSettings)}\n${userNotes}${attachmentSummary}\n\nFor the 'technicalSpec' field, ensure that at the very end of the markdown content, you add a '## Validation' section containing a single specific goal for this sprint and a short checklist (3-5 items) to verify the goal has been met.`;
 
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
         model,
@@ -380,7 +384,9 @@ const generateSingleVisualAssetForPhase = async (
     
     const toolDescription = {
         wireframe: 'a clean, to-scale, 3D wireframe model of the main component described. The style should be minimalist, professional, and clear, suitable for technical documentation.',
-        diagram: 'a one-page functional block diagram illustrating the system architecture and data flow. Use standard block diagram conventions, with clear labels and directional arrows.',
+        diagram: phase.name === 'Preliminary Design'
+            ? 'a high-level conceptual block diagram showing the main components and their interactions, focusing on the overall architecture rather than detailed data flow. Use standard block diagram conventions, with clear labels and directional arrows.'
+            : 'a one-page functional block diagram illustrating the system architecture and data flow. Use standard block diagram conventions, with clear labels and directional arrows.',
         schematic: 'a simple 2D schematic diagram of the electronic circuit or mechanical assembly. Use standard symbols and a clean layout.'
     };
     const docBaseName = toolType === 'diagram' ? `${phase.name} - System Diagram`
@@ -450,11 +456,17 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
         let updatedSprints = [...phase.sprints];
         for (let i = 0; i < updatedSprints.length; i++) {
             const doc = updatedSprints[i];
-            onToast(`Generating document: ${doc.name}...`);
-            const output = await generateSubDocument({ ...project, phases: project.phases.map(p => p.id === phase.id ? { ...p, sprints: updatedSprints } : p) }, phase, doc);
-            updatedSprints[i] = { ...doc, output, status: 'completed' };
-            onUpdate({ sprints: updatedSprints });
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            try {
+                onToast(`Generating document: ${doc.name}...`);
+                const output = await generateSubDocument({ ...project, phases: project.phases.map(p => p.id === phase.id ? { ...p, sprints: updatedSprints } : p) }, phase, doc);
+                updatedSprints[i] = { ...doc, output, status: 'completed' };
+                onUpdate({ sprints: updatedSprints });
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (error) {
+                onToast(`Failed to generate document: ${doc.name}. Skipping.`, 'error');
+                console.error(`Automation failed on document ${doc.name}`, error);
+                continue;
+            }
         }
         finalOutput = updatedSprints.map(d => `## ${d.name}\n\n${d.output || 'Not generated.'}`).join('\n\n---\n\n');
         onUpdate({ sprints: updatedSprints, output: finalOutput, status: 'in-progress' });
@@ -474,35 +486,52 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
             );
 
             if (processableSprints.length === 0) {
-                throw new Error("Circular dependency or missing dependency detected in sprints. Automation cannot proceed.");
+                // This could be due to a circular dependency or a failed sprint that others depend on.
+                const remainingSprints = currentSprints.filter(s => s.status !== 'completed').map(s => s.name).join(', ');
+                onToast(`Automation stalled. Cannot process remaining sprints: ${remainingSprints}. Check for failed dependencies.`, 'error');
+                break; // Exit the loop
             }
 
             for (const sprint of processableSprints) {
-                onToast(`Generating sprint: ${sprint.name}...`);
-                
-                const projectSnapshot = {
-                    ...project,
-                    phases: project.phases.map(p => p.id === phase.id ? { ...p, output: currentOutput, sprints: currentSprints } : p)
-                };
-                
-                const { technicalSpec, deliverables } = await generateSprintSpecification(projectSnapshot, { ...phase, output: currentOutput, sprints: currentSprints }, sprint);
-                
-                const updatedSprint: Sprint = { ...sprint, output: technicalSpec, deliverables, status: 'completed' };
-                currentOutput = `${currentOutput || ''}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n${technicalSpec}`;
-                currentSprints = currentSprints.map(s => s.id === sprint.id ? updatedSprint : s);
-                
-                onUpdate({ output: currentOutput, sprints: currentSprints });
-                completedSprintIds.add(sprint.id);
+                try {
+                    onToast(`Generating sprint: ${sprint.name}...`);
+                    
+                    const projectSnapshot = {
+                        ...project,
+                        phases: project.phases.map(p => p.id === phase.id ? { ...p, output: currentOutput, sprints: currentSprints } : p)
+                    };
+                    
+                    const { technicalSpec, deliverables } = await generateSprintSpecification(projectSnapshot, { ...phase, output: currentOutput, sprints: currentSprints }, sprint);
+                    
+                    const updatedSprint: Sprint = { ...sprint, output: technicalSpec, deliverables, status: 'completed' };
+                    currentOutput = `${currentOutput || ''}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n${technicalSpec}`;
+                    currentSprints = currentSprints.map(s => s.id === sprint.id ? updatedSprint : s);
+                    
+                    onUpdate({ output: currentOutput, sprints: currentSprints });
+                    completedSprintIds.add(sprint.id);
+                } catch (error) {
+                    onToast(`Failed to generate sprint: ${sprint.name}. Skipping.`, 'error');
+                    console.error(`Automation failed on sprint ${sprint.name}`, error);
+                    // Do not add to completedSprintIds, so dependency checks will correctly fail for other sprints.
+                    // We just continue to the next processable sprint.
+                    continue;
+                }
             }
         }
         finalOutput = currentOutput;
         onUpdate({ status: 'in-progress' });
 
     } else { // Standard Phase
-        onToast(`Generating documentation for ${phase.name}...`);
-        const output = await generateStandardPhaseOutput(project, phase, phase.tuningSettings);
-        finalOutput = output;
-        onUpdate({ output, status: 'in-progress' });
+        try {
+            onToast(`Generating documentation for ${phase.name}...`);
+            const output = await generateStandardPhaseOutput(project, phase, phase.tuningSettings);
+            finalOutput = output;
+            onUpdate({ output, status: 'in-progress' });
+        } catch (error: any) {
+            onToast(`Failed to generate documentation for ${phase.name}.`, 'error');
+            console.error(`Automation error on phase ${phase.name}`, error);
+            throw error; // Propagate to stop the whole process as this is a blocking failure.
+        }
     }
 
     let finalPhaseState: Partial<Phase> = { output: finalOutput };
@@ -627,7 +656,7 @@ export const generateStandardVisualAsset = async (
 export const generateAdvancedAsset = async (
     project: Project,
     sprint: Sprint,
-    toolType: 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code'
+    toolType: 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula'
 ): Promise<{ content: string; docName: string; }> => {
     const ai = getAi();
     const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.output || sprint.description}`;
@@ -641,6 +670,7 @@ export const generateAdvancedAsset = async (
         '2d-image': 'a photorealistic 2D image of the final product in a relevant environment. The prompt should describe the scene, lighting, and materials in detail.',
         '3d-printing-file': 'a 3D printing file in text-based STL format. The prompt should ask for valid STL code for a simplified version of the component, specifying key dimensions and features.',
         'software-code': 'a software code file. The prompt should ask for well-commented code in an appropriate language (e.g., Python, JavaScript) to implement the core logic described in the sprint.',
+        'chemical-formula': 'a chemical process or formula diagram as an SVG file. The prompt should ask for valid SVG XML code representing the chemical structures, reactions, or process flow described in the sprint. Use standard chemical drawing conventions.',
     };
 
     const orchestratorUserPrompt = `Project & Sprint Context:\n${fullContext}\n\nTask: Create a generation prompt and a suitable document name for ${toolDescriptions[toolType]}`;
@@ -767,7 +797,6 @@ export const runRiskAssessmentWorkflow = async (
             const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to identify the next most critical potential risk for the project based on the provided documents and the risks already found. Formulate a specific, focused topic for the Doer agent to investigate. Be concise.";
             const orchestratorPrompt = `Project Context:\n${projectContext}\n\nRisks Found So Far:\n${JSON.stringify(foundRisks)}\n\nIdentify the next single, most important area to investigate for a new risk.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
             const doerTask = orchestratorResponse.text;
             onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
@@ -777,7 +806,6 @@ export const runRiskAssessmentWorkflow = async (
             const doerSystemInstruction = "You are a Doer Agent, an expert risk analyst. Based on the task from the orchestrator and the project context, your job is to identify and formulate a single, specific risk. You MUST provide a title, category, severity, a detailed description, and a concrete mitigation plan. Respond in a JSON object with these fields.";
             const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the risk as a JSON object.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: doerPrompt,
                 config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Technical', 'Schedule', 'Budget', 'Resource', 'Operational', 'Other'] }, severity: { type: Type.STRING, enum: ['Low', 'Medium', 'High', 'Critical'] }, description: { type: Type.STRING }, mitigation: { type: Type.STRING } } } }
@@ -789,7 +817,6 @@ export const runRiskAssessmentWorkflow = async (
             const qaSystemInstruction = "You are a QA Agent. Your job is to validate the proposed risk. Is it realistic? Is the mitigation plan sensible? Based on this risk and the number of iterations, should we stop searching for more risks? A high iteration count or finding a 'Low' severity risk are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
             const qaPrompt = `Proposed Risk:\n${JSON.stringify(newRiskDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the risk and decide if the search should stop.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: qaPrompt,
                 config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
@@ -837,7 +864,7 @@ export const runRiskAssessmentWorkflow = async (
 
 export const queryProjectData = async (project: Project, query: string): Promise<string> => {
     const ai = getAi();
-    const model = selectModel({});
+    const model = selectModel({ taskType: 'query' });
     const fullContext = getFullProjectContext(project);
     
     const systemInstruction = `You are an AI assistant with complete knowledge of the provided engineering project. Answer the user's question based *only* on the context provided. If the answer is not in the context, say "I cannot answer that based on the available project documentation."`;
@@ -1021,7 +1048,6 @@ export const runResourceAnalysisWorkflow = async (
             const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your goal is to find required resources (software, equipment) and their sources. Based on the project documents and resources already found, identify the next most critical resource category or component to investigate. Be specific and concise.";
             const orchestratorPrompt = `Project Context:\n${projectContext}\n\nResources Found So Far:\n${JSON.stringify(foundResources)}\n\nIdentify the next single, most important resource or category to investigate.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
             const doerTask = orchestratorResponse.text;
             onProgress({ currentAgent: 'Orchestrator', iteration: i, logMessage: `Task for Doer: ${doerTask}` });
@@ -1031,7 +1057,6 @@ export const runResourceAnalysisWorkflow = async (
             const doerSystemInstruction = "You are a Doer Agent, an expert engineering resource planner. Based on the task from the orchestrator and the project context, identify a single, specific resource. You MUST provide its name, a source or vendor, its category ('Software' or 'Equipment'), and a brief justification. Respond in a JSON object.";
             const doerPrompt = `Project Context:\n${projectContext}\n\nTask: ${doerTask}\n\nFormulate the resource as a JSON object.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: doerPrompt,
                 config: { systemInstruction: doerSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, source: { type: Type.STRING }, category: { type: Type.STRING, enum: ['Software', 'Equipment', 'Other'] }, justification: { type: Type.STRING } } } }
@@ -1043,7 +1068,6 @@ export const runResourceAnalysisWorkflow = async (
             const qaSystemInstruction = "You are a QA Agent. Validate the proposed resource. Is it realistic? Is the source appropriate? Is the justification sound? Based on this and the iteration count, should we stop searching? A high iteration count or finding an obvious resource are good reasons to stop. Respond with JSON: `{ \"approved\": boolean, \"feedback\": string, \"shouldStop\": boolean }`.";
             const qaPrompt = `Proposed Resource:\n${JSON.stringify(newResourceDraft)}\n\nTotal Iterations So Far: ${i}/${maxIterations}\n\nValidate the resource and decide if the search should stop.`;
             
-            // FIX: Explicitly type the return value of withRetry.
             const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
                 model, contents: qaPrompt,
                 config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING }, shouldStop: { type: Type.BOOLEAN } } } }
@@ -1128,9 +1152,18 @@ export const generatePhaseTasks = async (project: Project, phase: Phase): Promis
 
 export const generateTailoredPhaseDescriptions = async (disciplines: string[], phases: {name: string, description: string}[]): Promise<{[key: string]: string}> => {
     const ai = getAi();
-    const model = selectModel({});
-    const systemInstruction = `You are an expert AI engineering consultant. Your task is to rewrite a series of standard engineering phase descriptions to be more specific and relevant to a project involving the following disciplines: ${disciplines.join(', ')}. The rewritten descriptions should be professional, concise (1-2 sentences), and use terminology appropriate for the given disciplines. Your output must be a single JSON object where keys are the original phase names and values are the new, tailored descriptions.`;
-    const userPrompt = `## Engineering Disciplines: ${disciplines.join(', ')}\n\n## Standard Phases to Tailor:\n${JSON.stringify(phases, null, 2)}\n\n## Task:\nRewrite the descriptions for each phase and return the result as a JSON object.`;
+    const model = selectModel({ taskType: 'projectSetup' });
+
+    const keyMap = new Map<string, string>();
+    const schemaProperties = phases.reduce((acc: Record<string, { type: Type.STRING }>, phase) => {
+        const camelCaseKey = toCamelCase(phase.name);
+        keyMap.set(camelCaseKey, phase.name);
+        acc[camelCaseKey] = { type: Type.STRING };
+        return acc;
+    }, {});
+
+    const systemInstruction = `You are an expert AI engineering consultant. Your task is to rewrite a series of standard engineering phase descriptions to be more specific and relevant to a project involving the following disciplines: ${disciplines.join(', ')}. The rewritten descriptions should be professional, concise (1-2 sentences), and use terminology appropriate for the given disciplines. Your output must be a single JSON object where keys are the camel-cased phase names provided in the schema.`;
+    const userPrompt = `## Engineering Disciplines: ${disciplines.join(', ')}\n\n## Standard Phases to Tailor:\n${JSON.stringify(phases, null, 2)}\n\n## Task:\nRewrite the descriptions for each phase and return the result as a JSON object with camelCased keys as specified in the response schema.`;
     
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
         model,
@@ -1140,16 +1173,31 @@ export const generateTailoredPhaseDescriptions = async (disciplines: string[], p
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
-                properties: phases.reduce((acc, phase) => {
-                    acc[phase.name] = { type: Type.STRING };
-                    return acc;
-                }, {})
+                properties: schemaProperties,
             }
         }
     }), 3);
 
     try {
-        return JSON.parse(response.text);
+        const parsedResponse = JSON.parse(response.text);
+        const tailoredDescriptions: { [key: string]: string } = {};
+
+        // Map the camelCase keys back to the original phase names
+        for (const camelCaseKey in parsedResponse) {
+            if (keyMap.has(camelCaseKey)) {
+                const originalName = keyMap.get(camelCaseKey)!;
+                tailoredDescriptions[originalName] = parsedResponse[camelCaseKey];
+            }
+        }
+
+        // Ensure all phases are present in the final object, falling back to original if AI omits one
+        for(const phase of phases) {
+            if (!tailoredDescriptions[phase.name]) {
+                tailoredDescriptions[phase.name] = phase.description;
+            }
+        }
+
+        return tailoredDescriptions;
     } catch (e) {
         throw new Error("AI returned invalid JSON for tailored phase descriptions.");
     }
