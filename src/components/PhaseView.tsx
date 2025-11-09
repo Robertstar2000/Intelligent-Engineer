@@ -51,6 +51,19 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
                    />;
         }
 
+        if (['Feasibility Study', 'Launch', 'Operation', 'Improvement'].includes(localPhase.name)) {
+             return <StandardPhaseWorkflow
+                    phase={localPhase}
+                    project={project}
+                    onUpdatePhase={handleUpdatePhase}
+                    onUpdateProject={updateProject}
+                    onPhaseComplete={onPhaseComplete}
+                    setExternalError={setGenerationError}
+                    onGoToNext={onReturnToDashboard}
+                    setToast={setToast}
+               />;
+        }
+
         if (['Requirements', 'Preliminary Design', 'Testing'].includes(localPhase.name)) {
             return <MultiDocPhaseWorkflow 
                         phase={localPhase}
@@ -77,7 +90,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
                     />;
         }
         
-        // Standard Workflow for phases like Launch, Operation, Improvement
+        // Fallback to standard workflow
         return <StandardPhaseWorkflow
                     phase={localPhase}
                     project={project}
@@ -103,7 +116,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
             {generationError && <GenerationError message={generationError} />}
             {renderWorkflow()}
 
-            {localPhase.output && (
+            {localPhase.outputs && localPhase.outputs.length > 0 && (
                  <CommentsThread
                     comments={phaseComments}
                     users={project.users}

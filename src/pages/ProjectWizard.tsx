@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { CheckCircle, Plus, Search, LoaderCircle } from 'lucide-react';
+import { CheckCircle, Plus, Search, LoaderCircle, Shield } from 'lucide-react';
 import { Button, Card, ProgressBar } from '../components/ui';
 import { TuningControls } from '../components/TuningControls';
 import { useProject } from '../context/ProjectContext';
 import { Project, Phase } from '../types';
-import { PROJECT_TEMPLATES, ENGINEERING_DISCIPLINES } from '../constants';
+import { PROJECT_TEMPLATES, ENGINEERING_DISCIPLINES, COMPLIANCE_STANDARDS } from '../constants';
 import { generateTailoredPhaseDescriptions } from '../services/geminiService';
 
 interface ProjectWizardProps {
@@ -14,7 +14,7 @@ interface ProjectWizardProps {
 export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps) => {
   const { currentUser, addProject } = useProject();
   const [step, setStep] = useState(1);
-  const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[], customConcept: '' });
+  const [projectData, setProjectData] = useState({ name: '', description: '', requirements: '', constraints: '', disciplines: [] as string[], complianceStandards: [] as string[], customConcept: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
   const [hasInteracted, setHasInteracted] = useState({ requirements: false, constraints: false });
@@ -31,25 +31,29 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   const filteredDisciplines = ENGINEERING_DISCIPLINES.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleDisciplineToggle = (discipline: string) => setProjectData(prev => ({ ...prev, disciplines: prev.disciplines.includes(discipline) ? prev.disciplines.filter(d => d !== discipline) : prev.disciplines.length < 3 ? [...prev.disciplines, discipline] : prev.disciplines }));
   
+  const filteredStandards = COMPLIANCE_STANDARDS.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
+  const handleStandardToggle = (standard: string) => setProjectData(prev => ({ ...prev, complianceStandards: prev.complianceStandards.includes(standard) ? prev.complianceStandards.filter(s => s !== standard) : [...prev.complianceStandards, standard] }));
+
   const createProject = async () => {
     if (!currentUser) return;
-    setStep(6); // Move to the finalizing step
+    setStep(7); // Move to the finalizing step
     
     const basePhasesData = [
+        { name: 'Feasibility Study', description: 'Determine if the project is technically, economically, and strategically viable before committing significant resources.', sprints: [], tuningSettings: { marketAnalysis: 80, technicalFeasibility: 90, economicViability: 70, pestAnalysis: 60 }, isEditable: true, designReview: { required: false, checklist: [] } },
         { name: 'Requirements', description: 'Define clear functional and performance objectives', 
             sprints: [
-                { name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.' },
-                { name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.' },
-                { name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.' },
+                { id: 'req-1', name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.' },
+                { id: 'req-2', name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.' },
+                { id: 'req-3', name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.' },
             ], 
             tuningSettings: requirementsTuning, isEditable: true, designReview: { required: false, checklist: [] } 
         },
         { 
             name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies', 
             sprints: [
-                { name: 'Conceptual Design Options', description: 'Generate several distinct high-level design concepts to address the project requirements.' },
-                { name: 'Trade Study Analysis', description: 'Conduct a formal trade study to compare the generated concepts against weighted criteria and select the optimal path forward.' },
-                { name: 'Design Review Checklist', description: 'A formal checklist to verify all preliminary design requirements and success criteria have been met before proceeding.' },
+                { id: 'pd-1', name: 'Conceptual Design Options', description: 'Generate several distinct high-level design concepts to address the project requirements.' },
+                { id: 'pd-2', name: 'Trade Study Analysis', description: 'Conduct a formal trade study to compare the generated concepts against weighted criteria and select the optimal path forward.' },
+                { id: 'pd-3', name: 'Design Review Checklist', description: 'A formal checklist to verify all preliminary design requirements and success criteria have been met before proceeding.' },
             ], 
             tuningSettings: { creativity: 80, costOptimization: 50, performanceBias: 70, modularity: 60 }, isEditable: true, designReview: { required: true, checklist: [] } 
         },
@@ -57,8 +61,8 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
         { 
             name: 'Testing', description: 'Develop formal Verification and Validation plans', 
             sprints: [
-                { name: 'Verification Plan', description: 'Define tests to confirm the system is built correctly to specifications ("Are we building the product right?").' },
-                { name: 'Validation Plan', description: 'Define tests to confirm the system meets user needs and requirements ("Are we building the right product?").' },
+                { id: 'test-1', name: 'Verification Plan', description: 'Define tests to confirm the system is built correctly to specifications ("Are we building the product right?").' },
+                { id: 'test-2', name: 'Validation Plan', description: 'Define tests to confirm the system meets user needs and requirements ("Are we building the right product?").' },
             ], 
             tuningSettings: { coverage: 90, edgeCaseFocus: 75, automationPriority: 80, destructiveTesting: 40 }, isEditable: true, designReview: { required: false, checklist: [] } 
         },
@@ -82,13 +86,14 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
         name: phaseData.name,
         description: (tailoredDescriptions as any)[phaseData.name] || phaseData.description,
         status: 'not-started',
+        outputs: [],
         sprints: phaseData.sprints.map(sprintData => ({
             id: crypto.randomUUID(),
             name: sprintData.name,
             description: sprintData.description,
             status: 'not-started',
             deliverables: [],
-            output: '',
+            outputs: [],
         })),
         tuningSettings: phaseData.tuningSettings,
         isEditable: phaseData.isEditable,
@@ -96,7 +101,7 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
     }));
 
     const newProject: Project = {
-      id: crypto.randomUUID(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
+      id: crypto.randomUUID(), userId: currentUser.id, ...projectData, templateName: selectedTemplateName, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
       compactedContext: '',
       metaDocuments: [],
       users: [currentUser],
@@ -110,12 +115,12 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
 
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
-  const progress = (step / 6) * 100;
-  const titles = ['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines', 'Finalizing Project...'];
+  const progress = (step / 7) * 100;
+  const titles = ['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines', 'Compliance', 'Finalizing Project...'];
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl transform transition-all flex flex-col" title="Create a New Engineering Project" description={`Step ${step} of 6: ${titles[step - 1]}`}>
+      <Card className="w-full max-w-2xl transform transition-all flex flex-col" title="Create a New Engineering Project" description={`Step ${step} of 7: ${titles[step - 1]}`}>
         <div className="space-y-6 flex-grow overflow-y-auto p-6 -m-6 mt-0">
           <ProgressBar progress={progress} />
           {step === 1 && (
@@ -240,24 +245,42 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
             </div>
           )}
           {step === 6 && (
+             <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Compliance Standards (Optional)</label>
+               <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Select any regulatory standards that apply to this project. This will guide the AI in generating compliant documentation.</p>
+              <div className="mt-2 flex items-center border border-gray-300 rounded-md px-3 dark:border-gray-600">
+                <Search className="w-5 h-5 text-gray-400" />
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full py-2 px-2 border-0 focus:ring-0 sm:text-sm bg-transparent dark:text-white dark:placeholder-gray-400" placeholder="Search standards..." />
+              </div>
+              <div className="mt-2 max-h-48 overflow-y-auto border rounded-md p-2 flex flex-wrap gap-2 dark:border-gray-600">
+                {filteredStandards.map(s => (
+                  <button key={s} onClick={() => handleStandardToggle(s)}
+                    className={`px-3 py-1 text-sm rounded-full transition-colors ${projectData.complianceStandards.includes(s) ? 'bg-brand-secondary text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-charcoal-700 dark:text-gray-300 dark:hover:bg-charcoal-600'}`}>
+                    <Shield className="inline mr-2 w-4 h-4" />{s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {step === 7 && (
               <div className="text-center py-12">
                   <LoaderCircle className="w-12 h-12 mx-auto text-brand-primary animate-spin" />
                   <p className="mt-4 text-gray-600 dark:text-gray-400">Tailoring project lifecycle with AI...</p>
               </div>
           )}
         </div>
-        {step < 6 && (
+        {step < 7 && (
             <div className="flex justify-between mt-8 p-6 pt-0 -m-6 mb-0">
               <Button variant="outline" onClick={step === 1 ? onCancel : prevStep}>{step === 1 ? 'Cancel' : 'Back'}</Button>
               <Button 
-                onClick={step === 5 ? createProject : nextStep} 
+                onClick={step === 6 ? createProject : nextStep} 
                 disabled={
                     (step === 1 && (!selectedTemplateName || (selectedTemplateName === 'Custom Template' && !projectData.customConcept.trim()))) ||
                     (step === 2 && !projectData.name) || 
                     (step === 5 && projectData.disciplines.length === 0)
                 }
               >
-                {step === 5 ? 'Create Project' : 'Next'}
+                {step === 6 ? 'Create Project' : 'Next'}
               </Button>
             </div>
         )}

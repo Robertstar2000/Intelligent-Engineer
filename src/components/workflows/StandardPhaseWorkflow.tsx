@@ -3,7 +3,7 @@ import { generateStandardPhaseOutput, generateDesignReviewChecklist, selectModel
 import { TuningControls } from '../TuningControls';
 import { PhaseOutput } from '../PhaseOutput';
 import { PhaseActions } from '../PhaseActions';
-import { Project, Phase, ToastMessage } from '../../types';
+import { Project, Phase, ToastMessage, VersionedOutput } from '../../types';
 import { DiagramCard } from '../DiagramCard';
 
 interface WorkflowProps {
@@ -22,12 +22,20 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
     const [tuningSettings, setTuningSettings] = useState(phase.tuningSettings);
     const modelForGeneration = selectModel({ phase, tuningSettings });
 
-    const handleGenerate = async () => {
+    const latestOutput = phase.outputs[phase.outputs.length - 1]?.content;
+
+    const handleGenerate = async (reason: string) => {
         setIsLoading(true);
         setExternalError('');
         try {
             const output = await generateStandardPhaseOutput(project, phase, tuningSettings);
-            onUpdatePhase(phase.id, { output: output, status: 'in-progress', tuningSettings });
+            const newVersion: VersionedOutput = {
+                version: (phase.outputs.length || 0) + 1,
+                content: output,
+                reason,
+                createdAt: new Date(),
+            };
+            onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion], status: 'in-progress', tuningSettings });
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred during generation.');
         } finally {
@@ -36,13 +44,13 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
     };
     
     const handleMarkComplete = async () => {
-        if (!phase.output) return;
+        if (!latestOutput) return;
         setIsLoading(true);
         setExternalError('');
         
         if (phase.designReview?.required) {
             try {
-                const checklist = await generateDesignReviewChecklist(phase.output);
+                const checklist = await generateDesignReviewChecklist(latestOutput);
                 const updates: Partial<Phase> = {
                     status: 'in-review',
                     designReview: { ...phase.designReview, checklist: checklist },
@@ -62,13 +70,19 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
         }
     };
 
-    const handleSaveOutput = (newOutput: string) => {
-        onUpdatePhase(phase.id, { output: newOutput });
+    const handleSaveOutput = (newOutput: string, reason: string) => {
+        const newVersion: VersionedOutput = {
+            version: (phase.outputs.length || 0) + 1,
+            content: newOutput,
+            reason,
+            createdAt: new Date(),
+        };
+        onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion] });
     };
 
     const handleDownload = () => {
-        if (phase.output) {
-            const blob = new Blob([phase.output], { type: 'text/markdown' });
+        if (latestOutput) {
+            const blob = new Blob([latestOutput], { type: 'text/markdown' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -97,7 +111,7 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
                 apiKey={process.env.API_KEY || null}
                 modelName={modelForGeneration}
             />
-            {phase.output && (
+            {latestOutput && (
                  <DiagramCard
                     phase={phase}
                     project={project}
@@ -112,9 +126,9 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
                 onMarkComplete={handleMarkComplete}
                 onDownload={handleDownload}
                 onGoToNext={onGoToNext}
-                isCompletable={!!phase.output && !isLoading}
+                isCompletable={!!latestOutput && !isLoading}
                 reviewRequired={phase.designReview?.required}
-                isDownloadDisabled={!phase.output}
+                isDownloadDisabled={!latestOutput}
             />
         </div>
     );

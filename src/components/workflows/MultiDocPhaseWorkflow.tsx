@@ -3,7 +3,7 @@ import { Remarkable } from 'remarkable';
 import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap, RotateCcw } from 'lucide-react';
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
-import { Project, Phase, Sprint, ToastMessage } from '../../types';
+import { Project, Phase, Sprint, ToastMessage, VersionedOutput } from '../../types';
 import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel, generateDesignReviewChecklist } from '../../services/geminiService';
 import { MarkdownEditor } from '../MarkdownEditor';
 import { AttachmentManager } from '../AttachmentManager';
@@ -57,7 +57,16 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
 
     const handleSaveSprint = () => {
         if (!editingSprintId) return;
-        handleUpdateSprint(editingSprintId, { output: editedSprintOutput });
+        const sprint = phase.sprints.find(s => s.id === editingSprintId);
+        if (sprint) {
+            const newVersion: VersionedOutput = {
+                version: (sprint.outputs.length || 0) + 1,
+                content: editedSprintOutput,
+                reason: 'Manual edit',
+                createdAt: new Date()
+            };
+            handleUpdateSprint(editingSprintId, { outputs: [...sprint.outputs, newVersion] });
+        }
         setEditingSprintId(null);
         setEditedSprintOutput('');
     };
@@ -70,9 +79,18 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
 
         try {
             const output = await generateSubDocument(project, phase, doc);
-            const updatedSprints: Sprint[] = phase.sprints.map(d =>
-                d.id === docId ? { ...d, output: output, status: 'completed' } : d
-            );
+            const updatedSprints: Sprint[] = phase.sprints.map(d => {
+                if (d.id === docId) {
+                    const newVersion: VersionedOutput = {
+                        version: (d.outputs.length || 0) + 1,
+                        content: output,
+                        reason: 'Initial generation',
+                        createdAt: new Date(),
+                    };
+                    return { ...d, outputs: [...d.outputs, newVersion], status: 'completed' };
+                }
+                return d;
+            });
             onUpdatePhase(phase.id, { sprints: updatedSprints });
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred during generation.');
@@ -84,9 +102,15 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
     const handleMergeAndComplete = async () => {
         setIsMerging(true);
         setExternalError('');
-        const mergedOutput = phase.sprints.map(doc => `## ${doc.name}\n\n${doc.output || 'Not generated.'}`).join('\n\n---\n\n');
+        const mergedOutput = phase.sprints.map(doc => `## ${doc.name}\n\n${doc.outputs[doc.outputs.length - 1]?.content || 'Not generated.'}`).join('\n\n---\n\n');
 
-        let finalUpdates: Partial<Phase> = { output: mergedOutput };
+        const newVersion: VersionedOutput = {
+            version: (phase.outputs.length || 0) + 1,
+            content: mergedOutput,
+            reason: 'Merged documents from sprints',
+            createdAt: new Date(),
+        };
+        let finalUpdates: Partial<Phase> = { outputs: [...phase.outputs, newVersion] };
 
         if (phase.name === 'Requirements') {
             try {
@@ -127,8 +151,8 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         setIsLoadingSprints(true);
         setExternalError('');
         try {
-            const conceptualDesign = phase.sprints.find(s => s.name === 'Conceptual Design Options')?.output || '';
-            const tradeStudy = phase.sprints.find(s => s.name === 'Trade Study Analysis')?.output || '';
+            const conceptualDesign = phase.sprints.find(s => s.name === 'Conceptual Design Options')?.outputs.slice(-1)[0]?.content || '';
+            const tradeStudy = phase.sprints.find(s => s.name === 'Trade Study Analysis')?.outputs.slice(-1)[0]?.content || '';
 
             const newSprintsRaw = await generatePreliminaryDesignSprints(project, conceptualDesign, tradeStudy);
             const newSprints: Sprint[] = newSprintsRaw.map((s, i) => ({
@@ -137,7 +161,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 description: s.description,
                 status: 'not-started',
                 deliverables: [],
-                output: ''
+                outputs: []
             }));
             
             onUpdatePhase(phase.id, { sprints: [...phase.sprints, ...newSprints] });
@@ -210,7 +234,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                     onUpdateAttachments={(attachments) => handleUpdateSprint(doc.id, { attachments })}
                                 />
 
-                                {doc.output && (
+                                {doc.outputs.length > 0 && (
                                     <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
                                         {editingSprintId === doc.id ? (
                                              <div className="space-y-3">
@@ -237,13 +261,13 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                                             <><RotateCcw className="mr-2 w-4 h-4" />Regenerate</>
                                                         )}
                                                     </Button>
-                                                    <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output || ''); }}>
+                                                    <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.outputs[doc.outputs.length - 1]?.content || ''); }}>
                                                         <Edit3 className="mr-2 w-4 h-4" />Edit
                                                     </Button>
                                                 </div>
                                                 <div
                                                     className="bg-gray-50 dark:bg-charcoal-900/50 border dark:border-charcoal-700 rounded-lg p-4 max-h-64 overflow-y-auto prose dark:prose-invert max-w-none"
-                                                    dangerouslySetInnerHTML={{ __html: md.render(doc.output || '') }}
+                                                    dangerouslySetInnerHTML={{ __html: md.render(doc.outputs[doc.outputs.length - 1]?.content || '') }}
                                                 />
                                             </>
                                         )}
@@ -264,7 +288,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 </div>
             </Card>
 
-            {phase.output && (
+            {phase.outputs.length > 0 && (
                  <DiagramCard
                     phase={phase}
                     project={project}
@@ -288,8 +312,9 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                         phase={phase}
                         onMarkComplete={() => {}}
                         onDownload={() => {
-                             if (phase.output) {
-                                const blob = new Blob([phase.output], { type: 'text/markdown' });
+                             if (phase.outputs.length > 0) {
+                                const latestOutput = phase.outputs[phase.outputs.length - 1].content;
+                                const blob = new Blob([latestOutput], { type: 'text/markdown' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -300,7 +325,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                         }}
                         onGoToNext={onGoToNext}
                         isCompletable={false}
-                        isDownloadDisabled={!phase.output}
+                        isDownloadDisabled={phase.outputs.length === 0}
                     />
                 )}
             </div>

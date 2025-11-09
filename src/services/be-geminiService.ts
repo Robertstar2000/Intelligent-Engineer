@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, GenerateContentResponse, GenerateImagesResponse } from "@google/genai";
-import { Project, Phase, Sprint, TuningSettings, DesignReviewChecklistItem, Risk, Recommendation, AnalyticsMetrics, MetaDocument, Resource } from '../types';
+import { Project, Phase, Sprint, TuningSettings, DesignReviewChecklistItem, Risk, Recommendation, AnalyticsMetrics, MetaDocument, Resource, VersionedOutput } from '../types';
 import { withRetry } from '../utils';
 
 // --- CONSTANTS ---
@@ -125,8 +125,10 @@ const getProjectContext = (project: Project, currentPhaseId: string): string => 
     
     const subsequentContext = project.phases
         .slice(subsequentPhaseStartIndex, currentPhaseIndex)
-        .filter(p => p.output && p.status === 'completed')
-        .map(p => `## Context from Previous Phase (${p.name}):\n${p.output}`)
+        // fix: Check outputs array for content
+        .filter(p => p.outputs.length > 0 && p.status === 'completed')
+        // fix: Use latest content from outputs array
+        .map(p => `## Context from Previous Phase (${p.name}):\n${p.outputs[p.outputs.length - 1].content}`)
         .join('\n\n---\n\n');
 
     return baseContext + subsequentContext;
@@ -137,14 +139,16 @@ const getFullProjectContext = (project: Project): string => {
     if (project.compactedContext) {
         fullContext += `## COMPACTED PROJECT CONTEXT (from Requirements Phase):\n${project.compactedContext}\n\n---\n\n`;
         project.phases.slice(1).forEach(phase => {
-            if (phase.output && phase.status === 'completed') {
-                fullContext += `## Phase: ${phase.name}\n\n${phase.output}\n\n---\n\n`;
+            // fix: Check outputs array for content and use latest version
+            if (phase.outputs.length > 0 && phase.status === 'completed') {
+                fullContext += `## Phase: ${phase.name}\n\n${phase.outputs[phase.outputs.length - 1].content}\n\n---\n\n`;
             }
         });
     } else {
         project.phases.forEach(phase => {
-            if (phase.output && phase.status === 'completed') {
-                fullContext += `## Phase: ${phase.name}\n\n${phase.output}\n\n---\n\n`;
+            // fix: Check outputs array for content and use latest version
+            if (phase.outputs.length > 0 && phase.status === 'completed') {
+                fullContext += `## Phase: ${phase.name}\n\n${phase.outputs[phase.outputs.length - 1].content}\n\n---\n\n`;
             }
         });
     }
@@ -211,7 +215,8 @@ export const generateSubDocument = async (project: Project, phase: Phase, sprint
     const docIndex = phase.sprints.findIndex(d => d.id === sprint.id);
     const previousDocs = phase.sprints.slice(0, docIndex);
     const subPhaseContext = previousDocs
-        .map(pd => pd.output ? `## Context from Previous Document (${pd.name}):\n${pd.output}` : '')
+        // fix: Check outputs array for content and use latest version
+        .map(pd => pd.outputs.length > 0 ? `## Context from Previous Document (${pd.name}):\n${pd.outputs[pd.outputs.length - 1].content}` : '')
         .filter(Boolean).join('\n\n---\n\n');
 
     const baseContext = getBasePromptContext(project);
@@ -288,7 +293,7 @@ export const generateCriticalDesignSprints = async (project: Project, phase: Pha
                 description: s.description,
                 status: 'not-started',
                 deliverables: [],
-                output: '',
+                outputs: [],
                 dependencies: s.dependencies || [] // Temporarily store names
             };
         });
@@ -310,9 +315,11 @@ export const generateCriticalDesignSprints = async (project: Project, phase: Pha
 export const generateSprintSpecification = async (project: Project, phase: Phase, sprint: Sprint): Promise<{ technicalSpec: string, deliverables: string[] }> => {
     const ai = getAi();
     const model = selectModel({ phase });
-    const mergedOutput = phase.output || '';
+    // fix: Use outputs array to get latest content
+    const mergedOutput = phase.outputs[phase.outputs.length - 1]?.content || '';
     const previousSprints = phase.sprints.filter(s => s.status === 'completed');
-    const sprintContext = mergedOutput + '\n\n' + previousSprints.map(s => `### Completed Sprint: ${s.name}\n\n${s.output}`).join('\n\n---\n\n');
+    // fix: Use outputs array to get latest content from previous sprints
+    const sprintContext = mergedOutput + '\n\n' + previousSprints.map(s => `### Completed Sprint: ${s.name}\n\n${s.outputs[s.outputs.length - 1]?.content || ''}`).join('\n\n---\n\n');
 
     let baseInstruction: string;
     const disciplines = project.disciplines.join(', ');
@@ -426,7 +433,8 @@ const generateSingleVisualAssetForPhase = async (
     toolType: 'wireframe' | 'diagram' | 'schematic'
 ): Promise<MetaDocument> => {
     const ai = getAi();
-    const fullContext = getBasePromptContext(project) + `\n\n## Phase Content to Visualize:\n${phase.output}`;
+    // fix: Use latest content from outputs array
+    const fullContext = getBasePromptContext(project) + `\n\n## Phase Content to Visualize:\n${phase.outputs[phase.outputs.length - 1]?.content}`;
 
     const model = selectModel({ taskType: 'visualAssetOrchestrator' });
     const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed image generation prompt for an AI model (like Imagen) to create a technical engineering asset. The prompt must be descriptive, specifying style, components, connections, and layout. Respond with a JSON object containing a 'prompt' string and a 'docName' string for the generated file.";
@@ -473,7 +481,8 @@ const generateSingleVisualAssetForPhase = async (
 };
 
 export const generatePhaseVisualAssets = async (project: Project, phase: Phase): Promise<MetaDocument[]> => {
-    if (!phase.output) return [];
+    // fix: Check outputs array for content
+    if (phase.outputs.length === 0) return [];
 
     const assetPromises: Promise<MetaDocument | null>[] = [];
     const phaseName = phase.name;
@@ -508,7 +517,14 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
             try {
                 onToast(`Generating document: ${doc.name}...`);
                 const output = await generateSubDocument({ ...project, phases: project.phases.map(p => p.id === phase.id ? { ...p, sprints: updatedSprints } : p) }, phase, doc);
-                updatedSprints[i] = { ...doc, output, status: 'completed' };
+                // fix: Create a new version for the sprint output
+                const newVersion: VersionedOutput = {
+                    version: (doc.outputs.length || 0) + 1,
+                    content: output,
+                    reason: 'Automated generation',
+                    createdAt: new Date()
+                };
+                updatedSprints[i] = { ...doc, outputs: [...doc.outputs, newVersion], status: 'completed' };
                 onUpdate({ sprints: updatedSprints });
                 await new Promise(resolve => setTimeout(resolve, 1500));
             } catch (error) {
@@ -517,12 +533,21 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
                 continue;
             }
         }
-        finalOutput = updatedSprints.map(d => `## ${d.name}\n\n${d.output || 'Not generated.'}`).join('\n\n---\n\n');
-        onUpdate({ sprints: updatedSprints, output: finalOutput, status: 'in-progress' });
+        // fix: Get latest content from outputs array for merge
+        finalOutput = updatedSprints.map(d => `## ${d.name}\n\n${d.outputs[d.outputs.length - 1]?.content || 'Not generated.'}`).join('\n\n---\n\n');
+        const newPhaseVersion: VersionedOutput = {
+            version: (phase.outputs.length || 0) + 1,
+            content: finalOutput,
+            reason: 'Automated sprint merge',
+            createdAt: new Date()
+        };
+        onUpdate({ sprints: updatedSprints, outputs: [...phase.outputs, newPhaseVersion], status: 'in-progress' });
     } else if (phase.name === 'Critical Design') {
         onToast('Generating initial design spec & sprints...');
         const { preliminarySpec, sprints: newSprints } = await generateCriticalDesignSprints(project, phase);
-        onUpdate({ output: preliminarySpec, sprints: newSprints });
+        // fix: Create first version for the phase output
+        const newVersion: VersionedOutput = { version: 1, content: preliminarySpec, reason: 'Initial critical design spec', createdAt: new Date() };
+        onUpdate({ outputs: [newVersion], sprints: newSprints });
 
         let currentSprints = [...newSprints];
         let currentOutput = preliminarySpec;
@@ -545,18 +570,30 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
                 try {
                     onToast(`Generating sprint: ${sprint.name}...`);
                     
+                    const phaseForSnapshot: Phase = {
+                        ...phase,
+                        outputs: [{ version: 0, content: currentOutput, reason: 'snapshot', createdAt: new Date() }],
+                        sprints: currentSprints
+                    };
                     const projectSnapshot = {
                         ...project,
-                        phases: project.phases.map(p => p.id === phase.id ? { ...p, output: currentOutput, sprints: currentSprints } : p)
+                        phases: project.phases.map(p => p.id === phase.id ? phaseForSnapshot : p)
                     };
                     
-                    const { technicalSpec, deliverables } = await generateSprintSpecification(projectSnapshot, { ...phase, output: currentOutput, sprints: currentSprints }, sprint);
+                    const { technicalSpec, deliverables } = await generateSprintSpecification(projectSnapshot, phaseForSnapshot, sprint);
                     
-                    const updatedSprint: Sprint = { ...sprint, output: technicalSpec, deliverables, status: 'completed' };
+                    const newSprintVersion: VersionedOutput = { version: 1, content: technicalSpec, reason: 'Automated generation', createdAt: new Date() };
+                    const updatedSprint: Sprint = { ...sprint, outputs: [newSprintVersion], deliverables, status: 'completed' };
                     currentOutput = `${currentOutput || ''}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n${technicalSpec}`;
                     currentSprints = currentSprints.map(s => s.id === sprint.id ? updatedSprint : s);
                     
-                    onUpdate({ output: currentOutput, sprints: currentSprints });
+                    const newPhaseVersion: VersionedOutput = {
+                        version: (phase.outputs.length || 0) + 1,
+                        content: currentOutput,
+                        reason: `Automated merge of sprint ${sprint.name}`,
+                        createdAt: new Date(),
+                    };
+                    onUpdate({ outputs: [...phase.outputs, newPhaseVersion], sprints: currentSprints });
                     completedSprintIds.add(sprint.id);
                 } catch (error) {
                     onToast(`Failed to generate sprint: ${sprint.name}. Skipping.`, 'error');
@@ -575,7 +612,9 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
             onToast(`Generating documentation for ${phase.name}...`);
             const output = await generateStandardPhaseOutput(project, phase, phase.tuningSettings);
             finalOutput = output;
-            onUpdate({ output, status: 'in-progress' });
+            // fix: Create a new version for the phase output
+            const newVersion: VersionedOutput = { version: (phase.outputs.length || 0) + 1, content: output, reason: 'Automated generation', createdAt: new Date() };
+            onUpdate({ outputs: [...phase.outputs, newVersion], status: 'in-progress' });
         } catch (error: any) {
             onToast(`Failed to generate documentation for ${phase.name}.`, 'error');
             console.error(`Automation error on phase ${phase.name}`, error);
@@ -583,7 +622,14 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
         }
     }
 
-    let finalPhaseState: Partial<Phase> = { output: finalOutput };
+    // fix: Create a final version for the phase output
+    const finalVersion: VersionedOutput = {
+        version: (phase.outputs.length || 0) + 1,
+        content: finalOutput,
+        reason: 'Automated phase completion',
+        createdAt: new Date()
+    };
+    let finalPhaseState: Partial<Phase> = { outputs: [...phase.outputs, finalVersion] };
 
     if (phase.designReview?.required) {
         onToast('Generating design review checklist...');
@@ -660,7 +706,8 @@ export const generateStandardVisualAsset = async (
     toolType: 'wireframe' | 'diagram' | 'schematic'
 ): Promise<{ content: string; docName: string }> => {
     const ai = getAi();
-    const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.output || sprint.description}`;
+    // fix: Use latest content from outputs array
+    const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.outputs[sprint.outputs.length - 1]?.content || sprint.description}`;
 
     // 1. Orchestrator Agent
     const model = selectModel({ taskType: 'visualAssetOrchestrator' });
@@ -708,7 +755,8 @@ export const generateAdvancedAsset = async (
     toolType: 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula'
 ): Promise<{ content: string; docName: string; }> => {
     const ai = getAi();
-    const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.output || sprint.description}`;
+    // fix: Use latest content from outputs array
+    const fullContext = getBasePromptContext(project) + `\n\n## Current Sprint Context: ${sprint.name}\n${sprint.outputs[sprint.outputs.length - 1]?.content || sprint.description}`;
     
     const orchestratorModel = selectModel({ taskType: 'advancedAssetOrchestrator' });
     const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to create an expert-level, highly detailed generation prompt for another AI agent (a Doer). The prompt must be descriptive and specific to the requested asset type. Respond with a JSON object containing a 'prompt' string for the Doer and a 'docName' string for the generated file.";
@@ -811,12 +859,14 @@ export type RiskWorkflowProgress = {
 const serializeProjectDocs = (project: Project): { id: string, name: string, content: string }[] => {
     const docs: { id: string, name: string, content: string }[] = [];
     project.phases.forEach(phase => {
-        if (phase.output) {
-            docs.push({ id: `phase-${phase.id}`, name: phase.name, content: phase.output });
+        // fix: Check outputs array for content and use latest version
+        if (phase.outputs.length > 0) {
+            docs.push({ id: `phase-${phase.id}`, name: phase.name, content: phase.outputs[phase.outputs.length - 1].content });
         }
         phase.sprints.forEach(sprint => {
-            if (sprint.output) {
-                docs.push({ id: `sprint-${sprint.id}`, name: `${phase.name} / ${sprint.name}`, content: sprint.output });
+            // fix: Check outputs array for content and use latest version
+            if (sprint.outputs.length > 0) {
+                docs.push({ id: `sprint-${sprint.id}`, name: `${phase.name} / ${sprint.name}`, content: sprint.outputs[sprint.outputs.length - 1].content });
             }
         });
     });
@@ -1095,9 +1145,11 @@ export const generateTaskDescription = async (project: Project, phase: Phase, sp
     const ai = getAi();
     const model = selectModel({});
     
-    let context = getBasePromptContext(project) + `\n\n## Current Phase: ${phase.name}\n${phase.output || phase.description}`;
+    // fix: Use latest content from outputs array
+    let context = getBasePromptContext(project) + `\n\n## Current Phase: ${phase.name}\n${phase.outputs[phase.outputs.length - 1]?.content || phase.description}`;
     if (sprint) {
-        context += `\n\n## Current Sprint: ${sprint.name}\n${sprint.output || sprint.description}`;
+        // fix: Use latest content from outputs array
+        context += `\n\n## Current Sprint: ${sprint.name}\n${sprint.outputs[sprint.outputs.length - 1]?.content || sprint.description}`;
     }
 
     const systemInstruction = getSystemInstruction(
@@ -1373,4 +1425,89 @@ export const generateTailoredPhaseDescriptions = async (disciplines: string[], p
     } catch (e) {
         throw new Error("AI returned invalid JSON for tailored phase descriptions.");
     }
+};
+
+// fix: Implement missing function runThreatModelingWorkflow
+export const runThreatModelingWorkflow = async (project: Project): Promise<MetaDocument> => {
+    const ai = getAi();
+    const model = PRO_MODEL; // Security is critical, use Pro model.
+    const fullContext = getFullProjectContext(project);
+    
+    const systemInstruction = `You are a world-class cybersecurity expert specializing in threat modeling for complex engineering projects, particularly in ${project.disciplines.join(', ')}. Your task is to conduct a STRIDE-based threat analysis on the provided project documentation. Identify potential threats (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege), assess their risk, and recommend concrete mitigation strategies. The output must be a comprehensive and detailed report in Markdown format.`;
+    
+    const userPrompt = `## Full Project Documentation:\n${fullContext}\n\n## Task:\nConduct a STRIDE threat modeling analysis on this project. For each identified threat, provide:\n1.  **Threat Title:** A concise name for the threat.\n2.  **STRIDE Category:** The relevant STRIDE category.\n3.  **Description:** A detailed explanation of how the threat could manifest in this specific project.\n4.  **Risk Assessment:** An evaluation of the likelihood and impact (e.g., Low, Medium, High).\n5.  **Mitigation Strategy:** Specific, actionable steps to mitigate the threat.\n\nStructure the final output as a well-organized Markdown report.`;
+    
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: { systemInstruction }
+    }));
+
+    const reportContent = response.text;
+    
+    return {
+        id: `meta-threatmodel-${Date.now()}`,
+        name: `${project.name} - Threat Model Report`,
+        content: reportContent,
+        type: 'threat-model-report',
+        createdAt: new Date(),
+    };
+};
+
+// fix: Implement missing function generateComplianceTraceabilityMatrix
+export const generateComplianceTraceabilityMatrix = async (project: Project): Promise<MetaDocument> => {
+    if (!project.complianceStandards || project.complianceStandards.length === 0) {
+        throw new Error("No compliance standards have been selected for this project.");
+    }
+
+    const ai = getAi();
+    const model = PRO_MODEL; // Compliance is critical, use Pro model.
+    const fullContext = getFullProjectContext(project);
+
+    const systemInstruction = `You are an expert AI compliance officer with deep knowledge of engineering standards, including ${project.complianceStandards.join(', ')}. Your task is to create a Compliance Traceability Matrix. You will analyze the project's requirements, design documents, and testing plans to map project artifacts against the clauses of the specified compliance standards. The output must be a detailed Markdown table.`;
+
+    const userPrompt = `## Full Project Documentation:\n${fullContext}\n\n## Specified Compliance Standards:\n- ${project.complianceStandards.join('\n- ')}\n\n## Task:\nGenerate a Compliance Traceability Matrix in Markdown format. The table should have the following columns:\n1.  **Standard & Clause:** The specific compliance standard and clause number (e.g., "ISO 26262-4: 7.4.2").\n2.  **Requirement Link:** The specific project requirement that addresses this clause (quote or summarize it).\n3.  **Design Artifact Link:** The design document or section that implements the requirement (e.g., "Critical Design / FMEA Sprint").\n4.  **Test/Verification Link:** The test plan or case that verifies compliance (e.g., "Testing / Verification Plan / Test Case 3.1").\n5.  **Compliance Status:** (e.g., "Met", "Partially Met", "Not Met", "Not Applicable").\n\nAnalyze the documents to fill out the matrix as completely as possible.`;
+
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: { systemInstruction }
+    }));
+
+    const matrixContent = response.text;
+    
+    return {
+        id: `meta-compliance-${Date.now()}`,
+        name: `${project.name} - Compliance Traceability Matrix`,
+        content: matrixContent,
+        type: 'compliance-traceability-matrix',
+        createdAt: new Date(),
+    };
+};
+
+// fix: Add compareDocumentVersions function
+export const compareDocumentVersions = async (contentA: string, contentB: string, reasonA: string, reasonB: string): Promise<string> => {
+    const ai = getAi();
+    const model = FLASH_MODEL;
+    const systemInstruction = `You are an expert at comparing two versions of a document and providing a concise summary of the changes in Markdown. Highlight the key differences.`;
+    const userPrompt = `Please compare the following two document versions and explain the changes.
+
+Version A (Reason for change: ${reasonA}):
+---
+${contentA}
+---
+
+Version B (Reason for change: ${reasonB}):
+---
+${contentB}
+---
+
+Provide a summary of the differences in Markdown format.`;
+    
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: { systemInstruction }
+    }));
+    return response.text;
 };

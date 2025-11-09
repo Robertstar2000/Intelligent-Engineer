@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from './ui';
-import { GitBranch, FileText, CheckSquare } from 'lucide-react';
+import { GitBranch, FileText, CheckSquare, Clock } from 'lucide-react';
 
 export const Hero = ({ onLoginClick }) => {
   return (
@@ -16,6 +16,13 @@ export const Hero = ({ onLoginClick }) => {
         <div className="max-w-3xl mx-auto my-8 p-4 bg-yellow-400/10 border border-yellow-400/30 rounded-lg">
             <p className="text-yellow-200">
                 This application is designed to interact with a human designer. It is required that you review and edit the result before use. It will help you greatly accelerate the time required to do a design from months to days.
+            </p>
+        </div>
+
+        <div className="max-w-3xl mx-auto my-8 p-4 bg-blue-900/30 border border-blue-500/50 rounded-lg flex items-start space-x-4">
+            <Clock className="w-8 h-8 text-blue-300 flex-shrink-0 mt-1" />
+            <p className="text-blue-200 text-left">
+                <strong>Heads Up:</strong> This application uses hundreds of LLM calls in its agentic workflows. A full project automation can take 30-60 minutes, not including your review time. This process is designed to accelerate what would typically be months of manual design work.
             </p>
         </div>
 

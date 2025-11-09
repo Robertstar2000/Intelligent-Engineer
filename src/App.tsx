@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useProject } from './context/ProjectContext';
-import { Project, Phase, Comment, Task, ToastMessage } from './types';
+import { Project, Phase, Comment, Task, ToastMessage, SearchResult } from './types';
 
 import { LandingPage } from './pages/LandingPage';
 import { ProjectSelectionView } from './pages/ProjectSelectionView';
@@ -12,6 +12,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { TeamManagementPage } from './components/TeamManagementPage';
 import { TaskManagementPage } from './components/TaskManagementPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
+import { SearchResultsModal } from './components/SearchResultsModal';
 
 import { runAutomatedPhaseGeneration } from './services/geminiService';
 import { HelpModal } from './components/HelpModal';
@@ -47,6 +48,12 @@ export const App = () => {
     const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(false);
     const automationController = useRef(new AbortController());
     const projectStateRef = useRef(currentProject);
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [docToOpenFromSearch, setDocToOpenFromSearch] = useState<string | null>(null);
     
     useEffect(() => {
         if(currentUser && currentView === 'landing'){
@@ -82,6 +89,7 @@ export const App = () => {
 
     const handleExitProject = () => {
         setCurrentProject(null);
+        setSearchQuery('');
         setCurrentView('projectSelection');
     };
     
@@ -187,6 +195,56 @@ export const App = () => {
         automationController.current.abort();
     };
 
+    const handleSearch = (query: string) => {
+        if (!currentProject || !query.trim()) {
+            setSearchResults([]);
+            return;
+        }
+
+        const results: SearchResult[] = [];
+        const queryLower = query.toLowerCase();
+        
+        const allDocs = [];
+        currentProject.phases.forEach(phase => {
+            const latestPhaseOutput = phase.outputs[phase.outputs.length - 1];
+            if (latestPhaseOutput) {
+                allDocs.push({ id: `phase-${phase.id}`, name: `${phase.name} (Phase Output)`, content: latestPhaseOutput.content });
+            }
+            phase.sprints.forEach(sprint => {
+                 const latestSprintOutput = sprint.outputs[sprint.outputs.length - 1];
+                if (latestSprintOutput) {
+                    allDocs.push({ id: `sprint-${sprint.id}`, name: `${sprint.name} (Sprint)`, content: latestSprintOutput.content });
+                }
+            });
+        });
+        (currentProject.metaDocuments || []).forEach(doc => allDocs.push({ id: doc.id, name: doc.name, content: doc.content }));
+
+        for (const doc of allDocs) {
+            if (!doc.content) continue;
+            const contentLower = doc.content.toLowerCase();
+            const index = contentLower.indexOf(queryLower);
+            if (index !== -1) {
+                const start = Math.max(0, index - 50);
+                const end = Math.min(doc.content.length, index + query.length + 50);
+                const snippet = `...${doc.content.substring(start, end)}...`;
+                results.push({
+                    docId: doc.id,
+                    docName: doc.name,
+                    snippet: snippet,
+                    query: query,
+                });
+            }
+        }
+        setSearchResults(results);
+        setIsSearchModalOpen(true);
+    };
+
+    const handleSelectSearchResult = (docId: string) => {
+        setDocToOpenFromSearch(docId);
+        setCurrentView('documents');
+        setIsSearchModalOpen(false);
+    };
+
     const renderContent = () => {
         if (!currentUser) {
             return <LandingPage onLoginClick={() => setIsAuthModalOpen(true)} />;
@@ -202,6 +260,16 @@ export const App = () => {
         if (!currentProject) {
              return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} />;
         }
+
+        const projectHeaderProps = {
+            onGoHome: currentView === 'dashboard' ? handleExitProject : () => setCurrentView('dashboard'),
+            theme,
+            setTheme,
+            showBackButton: currentView !== 'dashboard',
+            searchQuery,
+            setSearchQuery,
+            onSearch: handleSearch,
+        };
         
         switch (currentView) {
             case 'dashboard':
@@ -228,7 +296,7 @@ export const App = () => {
                  }
                 return (
                     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
-                        <ProjectHeader onGoHome={() => setCurrentView('dashboard')} theme={theme} setTheme={setTheme} showBackButton/>
+                        <ProjectHeader {...projectHeaderProps} />
                         <PhaseView 
                             phase={phase}
                             onPhaseComplete={handlePhaseComplete}
@@ -238,7 +306,12 @@ export const App = () => {
                     </div>
                 );
             case 'documents':
-                return <DocumentsPage onBack={() => setCurrentView('dashboard')} setToast={setToast}/>;
+                return <DocumentsPage 
+                            onBack={() => setCurrentView('dashboard')} 
+                            setToast={setToast} 
+                            initialDocToOpenId={docToOpenFromSearch}
+                            onClearInitialDoc={() => setDocToOpenFromSearch(null)}
+                        />;
             case 'analytics':
                 return <AnalyticsDashboard onBack={() => setCurrentView('dashboard')} />;
             case 'team':
@@ -256,6 +329,12 @@ export const App = () => {
         <div className="relative">
             {renderContent()}
             <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} setToast={setToast} />
+            <SearchResultsModal 
+                isOpen={isSearchModalOpen}
+                onClose={() => setIsSearchModalOpen(false)}
+                results={searchResults}
+                onSelect={handleSelectSearchResult}
+            />
             {currentUser && (
               <>
                 {isHelpModalOpen && <HelpModal onClose={() => setIsHelpModalOpen(false)} />}

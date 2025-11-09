@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// fix: Add Eye to lucide-react imports
-import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2, FlaskConical, Eye } from 'lucide-react';
+import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2, FlaskConical, Eye, Lightbulb, Users } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
-import { Project, Phase, ToastMessage, MetaDocument, Message } from '../types';
+import { Project, Phase, ToastMessage, MetaDocument, Message, VersionedOutput } from '../types';
 import { generateVibePrompt as generateVibePromptFromService, generateProjectSummary } from '../services/geminiService';
 import { Remarkable } from 'remarkable';
 import { MarkdownEditor } from './MarkdownEditor';
@@ -225,12 +224,83 @@ const formatChatLog = (log: Message[]): string => {
 interface DocumentsPageProps {
   onBack: () => void;
   setToast: (toast: ToastMessage | null) => void;
+  initialDocToOpenId?: string | null;
+  onClearInitialDoc?: () => void;
 }
 
-export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }) => {
+export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, initialDocToOpenId, onClearInitialDoc }) => {
     const { project, updateProject } = useProject();
     const [isLoading, setIsLoading] = useState<string | null>(null);
     const [editingDocument, setEditingDocument] = useState<{ id: string; name: string; content: string; type: string; } | null>(null);
+
+    const allDocuments = React.useMemo(() => {
+        if (!project) return [];
+        const docs = [];
+        project.phases.forEach(phase => {
+            const latestPhaseOutput = phase.outputs[phase.outputs.length - 1];
+            if (latestPhaseOutput) {
+                docs.push({
+                    id: `phase-${phase.id}`,
+                    name: `${phase.name} (Phase Output)`,
+                    content: latestPhaseOutput.content,
+                    type: 'Phase',
+                    status: phase.status
+                });
+            }
+            if (phase.chatLog && phase.chatLog.length > 0) {
+                docs.push({
+                    id: `chat-phase-${phase.id}`,
+                    name: `Chat Log: ${phase.name}`,
+                    content: formatChatLog(phase.chatLog),
+                    type: 'Chat Log',
+                    status: phase.status
+                });
+            }
+            phase.sprints.forEach(sprint => {
+                const latestSprintOutput = sprint.outputs[sprint.outputs.length - 1];
+                if(latestSprintOutput) {
+                    docs.push({
+                        id: `sprint-${sprint.id}`,
+                        name: `${sprint.name} (Sprint Output)`,
+                        content: latestSprintOutput.content,
+                        type: 'Sprint',
+                        phaseName: phase.name
+                    });
+                }
+                if (sprint.chatLog && sprint.chatLog.length > 0) {
+                    docs.push({
+                        id: `chat-sprint-${sprint.id}`,
+                        name: `Chat Log: ${sprint.name}`,
+                        content: formatChatLog(sprint.chatLog),
+                        type: 'Chat Log',
+                        phaseName: phase.name
+                    });
+                }
+            });
+        });
+        
+        (project.metaDocuments || []).forEach(doc => {
+            const typeMap = {
+                'executive-summary': 'Summary', 'code-vibe-prompt': 'Vibe Prompt', 'simulation-vibe-prompt': 'Vibe Prompt',
+                'diagram': 'Diagram', 'wireframe': 'Wireframe', 'schematic': 'Schematic',
+                'pwb-layout-svg': 'PWB Layout (SVG)', '3d-image-veo': '3D Video (VEO)', '2d-image': '2D Image',
+                '3d-printing-file': '3D Print File (STL)', 'software-code': 'Software Code', 'chemical-formula': 'Chemical Formula (SVG)',
+                'recommendations-log': 'AI Recommendations', 'team-roles-suggestion': 'AI Team Suggestion'
+            };
+            docs.push({ id: doc.id, name: doc.name, content: doc.content, type: typeMap[doc.type] || doc.type });
+        });
+        return docs;
+    }, [project]);
+
+    useEffect(() => {
+        if (initialDocToOpenId && allDocuments.length > 0) {
+            const docToOpen = allDocuments.find(doc => doc.id === initialDocToOpenId);
+            if (docToOpen) {
+                setEditingDocument(docToOpen);
+            }
+            onClearInitialDoc?.();
+        }
+    }, [initialDocToOpenId, allDocuments, onClearInitialDoc]);
 
     if (!project) return null;
 
@@ -249,13 +319,13 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
             projectFolder.file('00_Project_Summary.md', summaryContent);
             
             project.phases.forEach((phase, index) => {
-                if (phase.output || (phase.sprints && phase.sprints.some(s => s.output)) || phase.chatLog) {
+                if (phase.outputs.length > 0 || (phase.sprints && phase.sprints.some(s => s.outputs.length > 0)) || phase.chatLog) {
                     const phaseIndex = String(index + 1).padStart(2, '0');
                     const phaseName = sanitizeFilename(phase.name);
                     const phaseFolder = projectFolder.folder(`${phaseIndex}_${phaseName}`);
                     
-                    if (phase.output) {
-                        phaseFolder.file('main_document.md', phase.output);
+                    if (phase.outputs.length > 0) {
+                        phaseFolder.file('main_document.md', phase.outputs[phase.outputs.length - 1].content);
                     }
 
                     if (phase.chatLog && phase.chatLog.length > 0) {
@@ -265,8 +335,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                     phase.sprints.forEach((sprint, sprintIndex) => {
                         const sprintName = sanitizeFilename(sprint.name);
                         const sprintFolder = phaseFolder.folder(`${sprintIndex + 1}_${sprintName}`);
-                        if (sprint.output) {
-                            sprintFolder.file('sprint_document.md', sprint.output);
+                        if (sprint.outputs.length > 0) {
+                            sprintFolder.file('sprint_document.md', sprint.outputs[sprint.outputs.length - 1].content);
                         }
                         if (sprint.chatLog && sprint.chatLog.length > 0) {
                             sprintFolder.file('chat_log.md', formatChatLog(sprint.chatLog));
@@ -289,6 +359,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                         'chemical-formula': 'svg',
                         '3d-printing-file': 'stl',
                         'software-code': 'js',
+                        'recommendations-log': 'md',
+                        'team-roles-suggestion': 'md',
                     };
                     const extension = extMap[doc.type] || 'md';
                     projectFolder.file(sanitizeFilename(doc.name) + `.${extension}`, doc.content);
@@ -326,7 +398,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         try {
             const promptText = await generateVibePromptFromService(project, type);
             const newDoc: MetaDocument = {
-                id: `meta-${Date.now()}`,
+                id: crypto.randomUUID(),
                 name: `${project.name} - ${type_map[type]}`,
                 content: promptText,
                 type: `${type}-vibe-prompt`,
@@ -350,7 +422,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         try {
             const summaryText = await generateProjectSummary(project);
             const newDoc: MetaDocument = {
-                id: `meta-${Date.now()}`,
+                id: crypto.randomUUID(),
                 name: `${project.name} - Executive Summary`,
                 content: summaryText,
                 type: 'executive-summary',
@@ -381,7 +453,13 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         } else {
             updatedProject.phases = project.phases.map(phase => {
                 if (type === 'phase' && phase.id === id) {
-                    return { ...phase, output: newContent };
+                    const newVersion: VersionedOutput = {
+                        version: (phase.outputs.length || 0) + 1,
+                        content: newContent,
+                        reason: 'Manual edit from Documents page',
+                        createdAt: new Date(),
+                    };
+                    return { ...phase, outputs: [...phase.outputs, newVersion] };
                 }
                  if (docId.startsWith('chat-phase-') && phase.id === id) {
                     setToast({ message: "Chat logs are read-only.", type: "info" });
@@ -391,7 +469,14 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
                 const sprintIndex = phase.sprints.findIndex(s => s.id === id);
                 if (type === 'sprint' && sprintIndex > -1) {
                     const updatedSprints = [...phase.sprints];
-                    updatedSprints[sprintIndex] = { ...updatedSprints[sprintIndex], output: newContent };
+                    const targetSprint = updatedSprints[sprintIndex];
+                    const newVersion: VersionedOutput = {
+                        version: (targetSprint.outputs.length || 0) + 1,
+                        content: newContent,
+                        reason: 'Manual edit from Documents page',
+                        createdAt: new Date(),
+                    };
+                    updatedSprints[sprintIndex] = { ...targetSprint, outputs: [...targetSprint.outputs, newVersion] };
                     return { ...phase, sprints: updatedSprints };
                 }
                  if (docId.startsWith('chat-sprint-') && sprintIndex > -1) {
@@ -407,58 +492,6 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
         setEditingDocument(prev => prev ? {...prev, content: newContent } : null);
     };
 
-    const allDocuments = [];
-    project.phases.forEach(phase => {
-        if (phase.output) {
-            allDocuments.push({
-                id: `phase-${phase.id}`,
-                name: `${phase.name} (Phase Output)`,
-                content: phase.output,
-                type: 'Phase',
-                status: phase.status
-            });
-        }
-        if (phase.chatLog && phase.chatLog.length > 0) {
-            allDocuments.push({
-                id: `chat-phase-${phase.id}`,
-                name: `Chat Log: ${phase.name}`,
-                content: formatChatLog(phase.chatLog),
-                type: 'Chat Log',
-                status: phase.status
-            });
-        }
-        phase.sprints.forEach(sprint => {
-            if(sprint.output) {
-                allDocuments.push({
-                    id: `sprint-${sprint.id}`,
-                    name: `${sprint.name} (Sprint Output)`,
-                    content: sprint.output,
-                    type: 'Sprint',
-                    phaseName: phase.name
-                });
-            }
-            if (sprint.chatLog && sprint.chatLog.length > 0) {
-                allDocuments.push({
-                    id: `chat-sprint-${sprint.id}`,
-                    name: `Chat Log: ${sprint.name}`,
-                    content: formatChatLog(sprint.chatLog),
-                    type: 'Chat Log',
-                    phaseName: phase.name
-                });
-            }
-        });
-    });
-    
-    (project.metaDocuments || []).forEach(doc => {
-        const typeMap = {
-            'executive-summary': 'Summary', 'code-vibe-prompt': 'Vibe Prompt', 'simulation-vibe-prompt': 'Vibe Prompt',
-            'diagram': 'Diagram', 'wireframe': 'Wireframe', 'schematic': 'Schematic',
-            'pwb-layout-svg': 'PWB Layout (SVG)', '3d-image-veo': '3D Video (VEO)', '2d-image': '2D Image',
-            '3d-printing-file': '3D Print File (STL)', 'software-code': 'Software Code', 'chemical-formula': 'Chemical Formula (SVG)',
-        };
-        allDocuments.push({ id: doc.id, name: doc.name, content: doc.content, type: typeMap[doc.type] || doc.type });
-    });
-
     const getIconForType = (type: string) => {
         const iconMap: { [key: string]: React.ReactNode } = {
             'Diagram': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
@@ -470,6 +503,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast }
             '3D Video (VEO)': <Video className="w-5 h-5 text-purple-500 flex-shrink-0" />,
             '3D Print File (STL)': <Printer className="w-5 h-5 text-gray-500 flex-shrink-0" />,
             'Software Code': <Code2 className="w-5 h-5 text-blue-500 flex-shrink-0" />,
+            'AI Recommendations': <Lightbulb className="w-5 h-5 text-yellow-500 flex-shrink-0" />,
+            'AI Team Suggestion': <Users className="w-5 h-5 text-teal-500 flex-shrink-0" />,
         };
         return iconMap[type] || <FileText className="w-5 h-5 text-brand-primary flex-shrink-0" />;
     };

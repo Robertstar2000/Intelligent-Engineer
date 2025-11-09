@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
-import { User, ToastMessage } from '../types';
+import { User, ToastMessage, MetaDocument } from '../types';
 import { ProjectHeader } from './ProjectHeader';
 import { Card, Button } from './ui';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -10,9 +10,10 @@ import { suggestTeamRoles } from '../services/geminiService';
 interface InviteMemberModalProps {
     onInvite: (user: Omit<User, 'id' | 'email'>) => void;
     onClose: () => void;
+    suggestedRoles: string[] | null;
 }
 
-const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onInvite, onClose }) => {
+const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onInvite, onClose, suggestedRoles }) => {
     const [name, setName] = useState('');
     const [role, setRole] = useState('');
     const [avatar, setAvatar] = useState('');
@@ -35,8 +36,20 @@ const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onInvite, onClose
                         <input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600" />
                     </div>
                     <div>
-                        <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                        <input type="text" id="role" value={role} onChange={e => setRole(e.target.value)} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600" />
+                        <label htmlFor="role-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
+                        <input 
+                            list="suggested-roles" 
+                            id="role-input" 
+                            value={role}
+                            onChange={e => setRole(e.target.value)}
+                            required
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600"
+                        />
+                         {suggestedRoles && (
+                            <datalist id="suggested-roles">
+                                {suggestedRoles.map((r, i) => <option key={i} value={r} />)}
+                            </datalist>
+                        )}
                     </div>
                      <div>
                         <label htmlFor="avatar" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Avatar (Emoji)</label>
@@ -59,10 +72,18 @@ interface TeamManagementPageProps {
 }
 
 export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, setToast }) => {
-    const { project, setProject, currentUser, theme, setTheme } = useProject();
+    const { project, setProject, currentUser, theme, setTheme, updateProject } = useProject();
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [userToRemove, setUserToRemove] = useState<User | null>(null);
-    const [suggestedRoles, setSuggestedRoles] = useState<string[] | null>(null);
+    const [suggestedRoles, setSuggestedRoles] = useState<string[] | null>(
+        () => {
+            const doc = project?.metaDocuments?.find(d => d.type === 'team-roles-suggestion');
+            if (doc) {
+                return doc.content.split('\n').slice(2).map(line => line.replace('- ', ''));
+            }
+            return null;
+        }
+    );
     const [isSuggesting, setIsSuggesting] = useState(false);
 
     if (!project) return null;
@@ -101,7 +122,27 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
         try {
             const roles = await suggestTeamRoles(project);
             setSuggestedRoles(roles);
-            setToast({ message: 'Successfully suggested team roles.', type: 'success' });
+            
+            const markdownContent = `# AI Suggested Team Roles\n\nBased on the project documentation, the following roles are recommended:\n\n${roles.map(r => `- ${r}`).join('\n')}`;
+            const newDoc: MetaDocument = {
+                id: `meta-roles-${Date.now()}`,
+                name: `${project.name} - AI Team Role Suggestions`,
+                content: markdownContent,
+                type: 'team-roles-suggestion',
+                createdAt: new Date()
+            };
+
+            const existingDocIndex = project.metaDocuments?.findIndex(d => d.type === 'team-roles-suggestion') ?? -1;
+            const updatedMetaDocs = [...(project.metaDocuments || [])];
+            if (existingDocIndex > -1) {
+                updatedMetaDocs[existingDocIndex] = newDoc;
+            } else {
+                updatedMetaDocs.push(newDoc);
+            }
+            
+            updateProject({ ...project, metaDocuments: updatedMetaDocs });
+
+            setToast({ message: 'Successfully suggested and saved team roles.', type: 'success' });
         } catch (error: any) {
             setToast({ message: error.message || 'Failed to suggest roles.', type: 'error' });
         } finally {
@@ -142,26 +183,28 @@ export const TeamManagementPage: React.FC<TeamManagementPageProps> = ({ onBack, 
             </Card>
 
             <Card title="AI Role Suggester" description="Analyze project documents to suggest necessary team roles." className="mt-6">
-                {isSuggesting ? (
-                    <div className="text-center p-4"><LoaderCircle className="w-6 h-6 animate-spin mx-auto text-brand-primary"/></div>
-                ) : suggestedRoles ? (
-                    <div className="p-4">
-                        <h4 className="font-semibold mb-2">Suggested Roles:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-sm">
-                            {suggestedRoles.map((role, index) => <li key={index}>{role}</li>)}
-                        </ul>
-                    </div>
-                ) : (
-                    <div className="p-4 text-center">
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">Click to have an AI analyze your project and suggest key roles.</p>
-                        <Button onClick={handleSuggestRoles}>
-                            <BrainCircuit className="w-4 h-4 mr-2" /> Suggest Roles
+                 <div className="p-4">
+                    <div className="flex justify-between items-center">
+                         <div>
+                            <h4 className="font-semibold mb-2">Suggested Roles:</h4>
+                            {isSuggesting ? (
+                                <div className="flex items-center space-x-2 text-sm text-gray-500"><LoaderCircle className="w-4 h-4 animate-spin"/><span>Analyzing project...</span></div>
+                            ) : suggestedRoles ? (
+                                <ul className="list-disc list-inside space-y-1 text-sm">
+                                    {suggestedRoles.map((role, index) => <li key={index}>{role}</li>)}
+                                </ul>
+                            ) : (
+                                <p className="text-sm text-gray-500">Click the button to generate role suggestions.</p>
+                            )}
+                        </div>
+                        <Button onClick={handleSuggestRoles} disabled={isSuggesting} variant="outline" size="sm">
+                            {isSuggesting ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <BrainCircuit className="w-4 h-4" />}
                         </Button>
                     </div>
-                )}
+                </div>
             </Card>
             
-            {isInviteModalOpen && <InviteMemberModal onInvite={handleAddUser} onClose={() => setIsInviteModalOpen(false)} />}
+            {isInviteModalOpen && <InviteMemberModal onInvite={handleAddUser} onClose={() => setIsInviteModalOpen(false)} suggestedRoles={suggestedRoles} />}
 
             <ConfirmationModal
                 isOpen={!!userToRemove}

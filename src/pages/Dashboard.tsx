@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List, PlayCircle, PauseCircle } from 'lucide-react';
+import { CheckCircle, Clock, Hourglass, Circle, Lock, ChevronRight, Rocket, XCircle, Save, Edit3, Archive, TrendingUp, Users, CheckSquare, Puzzle, LoaderCircle, LayoutGrid, List, PlayCircle, PauseCircle, Shield, AlertTriangle } from 'lucide-react';
 import { Button, Card, Badge, ProgressBar } from '../components/ui';
 import { useProject } from '../context/ProjectContext';
-import { Phase, Sprint, ToastMessage } from '../types';
+import { Phase, Sprint, ToastMessage, MetaDocument } from '../types';
 import { ProjectHeader } from '../components/ProjectHeader';
 import { RiskEnginePanel } from '../components/RiskEnginePanel';
 import { ChangeManagementPanel } from '../components/ChangeManagementPanel';
 import { ProjectExportPanel } from '../components/ProjectExportPanel';
+import { generateComplianceTraceabilityMatrix, runThreatModelingWorkflow } from '../services/geminiService';
 
 const getSprintStatusIcon = (status: Sprint['status']) => {
     switch (status) {
@@ -17,6 +18,91 @@ const getSprintStatusIcon = (status: Sprint['status']) => {
 };
 
 type AutomationStatus = 'idle' | 'running' | 'paused' | 'error' | 'complete';
+
+const SecurityPanel = ({ project, updateProject, setToast }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const threatModelDoc = project.metaDocuments?.find(doc => doc.type === 'threat-model-report');
+
+    const handleRunAnalysis = async () => {
+        setIsLoading(true);
+        try {
+            const newDoc = await runThreatModelingWorkflow(project);
+            const updatedMetaDocs = [...(project.metaDocuments || []).filter(d => d.type !== 'threat-model-report'), newDoc];
+            updateProject({ ...project, metaDocuments: updatedMetaDocs });
+            setToast({ message: 'Threat model analysis complete and saved to documents.', type: 'success' });
+        } catch (error: any) {
+            setToast({ message: `Security analysis failed: ${error.message}`, type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Card title="Security Analysis (SDL)" description="Run an AI-powered threat modeling analysis based on project documentation.">
+            {threatModelDoc ? (
+                 <div className="text-center py-4">
+                    <CheckCircle className="w-12 h-12 text-green-500 mx-auto"/>
+                    <p className="text-gray-600 dark:text-gray-400 my-2">Threat Model Report generated. View it in the Documents page.</p>
+                    <Button onClick={handleRunAnalysis} disabled={isLoading} variant="outline" size="sm">
+                        {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin"/> : <CheckSquare className="mr-2 w-4 h-4" />}
+                        Re-run Analysis
+                    </Button>
+                </div>
+            ) : (
+                <div className="text-center py-4">
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">Click to start the AI agent workflow to identify potential security threats.</p>
+                    <Button onClick={handleRunAnalysis} disabled={isLoading}>
+                        {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin"/> : <AlertTriangle className="mr-2 w-4 h-4" />}
+                        Run AI Security Analysis
+                    </Button>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+const CompliancePanel = ({ project, updateProject, setToast }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const complianceDoc = project.metaDocuments?.find(doc => doc.type === 'compliance-traceability-matrix');
+    
+    const handleRunAnalysis = async () => {
+        setIsLoading(true);
+        try {
+            const newDoc = await generateComplianceTraceabilityMatrix(project);
+            const updatedMetaDocs = [...(project.metaDocuments || []).filter(d => d.type !== 'compliance-traceability-matrix'), newDoc];
+            updateProject({ ...project, metaDocuments: updatedMetaDocs });
+            setToast({ message: 'Compliance matrix generated and saved to documents.', type: 'success' });
+        } catch (error: any) {
+            setToast({ message: `Compliance analysis failed: ${error.message}`, type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Card title="Regulatory Compliance" description="Generate a traceability matrix mapping requirements to design and testing.">
+             {complianceDoc ? (
+                 <div className="text-center py-4">
+                    <CheckCircle className="w-12 h-12 text-green-500 mx-auto"/>
+                    <p className="text-gray-600 dark:text-gray-400 my-2">Compliance Traceability Matrix generated. View it in the Documents page.</p>
+                    <Button onClick={handleRunAnalysis} disabled={isLoading} variant="outline" size="sm">
+                        {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin"/> : <CheckSquare className="mr-2 w-4 h-4" />}
+                        Re-generate Matrix
+                    </Button>
+                </div>
+            ) : (
+                <div className="text-center py-4">
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">Click to generate the compliance traceability matrix based on project documents.</p>
+                    <Button onClick={handleRunAnalysis} disabled={isLoading || project.complianceStandards.length === 0} title={project.complianceStandards.length === 0 ? 'Select compliance standards in project settings first' : ''}>
+                        {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin"/> : <Shield className="mr-2 w-4 h-4" />}
+                        Generate Compliance Matrix
+                    </Button>
+                </div>
+            )}
+        </Card>
+    );
+};
+
 
 interface DashboardProps {
   onSelectPhase: (index: number) => void;
@@ -34,7 +120,7 @@ interface DashboardProps {
   setToast: (toast: ToastMessage | null) => void;
 }
 export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onViewTeam, onViewTasks, onViewIntegrations, onExitProject, automationStatus, automatingPhaseId, onRunAutomation, onStopAutomation, isCollaborationPanelOpen, setToast }: DashboardProps) => {
-  const { project, theme, setTheme, updateProjectDetails } = useProject();
+  const { project, theme, setTheme, updateProjectDetails, updateProject } = useProject();
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedRequirements, setEditedRequirements] = useState(project?.requirements || '');
   const [editedConstraints, setEditedConstraints] = useState(project?.constraints || '');
@@ -109,19 +195,11 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
             <p className="text-gray-600 dark:text-gray-400 mt-2">Created on: {new Date(project.createdAt).toLocaleDateString()}</p>
         </div>
 
-        <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 dark:bg-yellow-900/20 dark:border-yellow-500">
-            <div className="flex">
-                <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                </div>
-                <div className="ml-3">
-                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        Be sure to read and edit AI output to keep the project aligned with your needs. Depending on project complexity, agentic AI generation can take several minutes per step—please be patient.
-                    </p>
-                </div>
-            </div>
+        <div className="mb-6 bg-blue-900/30 border border-blue-500/50 rounded-lg p-4 flex items-start space-x-4">
+             <Clock className="w-8 h-8 text-blue-300 flex-shrink-0 mt-1" />
+            <p className="text-blue-200">
+                <strong>Heads Up:</strong> This application uses hundreds of LLM calls in its agentic workflows. A full project automation can take 30-60 minutes, not including your review time. This process is designed to accelerate what would typically be months of manual design work.
+            </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -228,6 +306,8 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                 </Card>
                 {renderAutomationControls()}
                 <RiskEnginePanel />
+                <SecurityPanel project={project} updateProject={updateProject} setToast={setToast} />
+                <CompliancePanel project={project} updateProject={updateProject} setToast={setToast} />
                 <ChangeManagementPanel setToast={setToast} />
                 {showExportPanel && <ProjectExportPanel setToast={setToast} />}
             </div>
@@ -248,15 +328,15 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                             <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Phase</span>
                             <p className="font-semibold text-gray-900 dark:text-white">{project.phases[firstIncompleteIndex]?.name || 'Completed'}</p>
                         </div>
-                        <div>
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Disciplines</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                                {project.disciplines.map(d => <Badge key={d}>{d}</Badge>)}
-                            </div>
-                        </div>
                     </div>
                 </Card>
-                <Card title="Project Details">
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold">Project Details</h3>
+                        {!isEditingDetails && (
+                            <Button variant="outline" size="sm" onClick={() => setIsEditingDetails(true)}><Edit3 className="w-4 h-4 mr-2" /> Edit</Button>
+                        )}
+                    </div>
                     {isEditingDetails ? (
                         <div className="space-y-4 text-sm">
                             <div>
@@ -274,16 +354,29 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                         </div>
                     ) : (
                         <div className="space-y-4 text-sm">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="font-semibold text-gray-800 dark:text-gray-200">Template Used</label>
+                                    <p className="text-gray-600 dark:text-gray-400">{project.templateName}</p>
+                                </div>
+                                <div>
+                                    <label className="font-semibold text-gray-800 dark:text-gray-200">Development Mode</label>
+                                    <p className="text-gray-600 dark:text-gray-400 capitalize">{project.developmentMode}</p>
+                                </div>
+                            </div>
+                             <div>
+                                <label className="font-semibold text-gray-800 dark:text-gray-200">Disciplines</label>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {project.disciplines.map(d => <Badge key={d}>{d}</Badge>)}
+                                </div>
+                            </div>
                             <div>
                                 <label className="font-semibold text-gray-800 dark:text-gray-200">Requirements</label>
-                                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{project.requirements}</p>
+                                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-24 overflow-y-auto">{project.requirements}</p>
                             </div>
                             <div>
                                 <label className="font-semibold text-gray-800 dark:text-gray-200">Constraints</label>
-                                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{project.constraints}</p>
-                            </div>
-                            <div className="flex justify-end">
-                                <Button variant="outline" size="sm" onClick={() => setIsEditingDetails(true)}><Edit3 className="w-4 h-4 mr-2" /> Edit</Button>
+                                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-24 overflow-y-auto">{project.constraints}</p>
                             </div>
                         </div>
                     )}

@@ -78,7 +78,7 @@ export const DesignReviewWorkflow = ({ phase, project, onUpdateProject, onUpdate
         <>
             <Card title="Phase Output for Review" description="This is the generated document pending approval.">
                  <div className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto prose dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: md.render(phase.output || '') }}
+                    dangerouslySetInnerHTML={{ __html: md.render(phase.outputs[phase.outputs.length - 1]?.content || '') }}
                 />
             </Card>
             <Card title="Design Review" description="Verify all success factors are met before proceeding. The project cannot advance until this review is complete.">

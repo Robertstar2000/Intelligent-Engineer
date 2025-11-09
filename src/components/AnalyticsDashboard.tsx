@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, ArrowRight, Home, Zap, LoaderCircle, Lightbul
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge, ProgressBar } from './ui';
 import { ProjectHeader } from './ProjectHeader';
-import { AnalyticsMetrics, Recommendation } from '../types';
+import { AnalyticsMetrics, Recommendation, MetaDocument } from '../types';
 import { calculateProjectMetrics } from '../services/analyticsEngine';
 import { generateProjectRecommendations } from '../services/geminiService';
 
@@ -49,7 +49,7 @@ const BenchmarkCard = ({ title, userValue, benchmarkValue, unit = '' }) => {
 };
 
 export const AnalyticsDashboard = ({ onBack }) => {
-    const { project, setProject, theme, setTheme } = useProject();
+    const { project, setProject, theme, setTheme, updateProject } = useProject();
     const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
     const [isLoadingRecs, setIsLoadingRecs] = useState(false);
 
@@ -65,7 +65,29 @@ export const AnalyticsDashboard = ({ onBack }) => {
         setIsLoadingRecs(true);
         try {
             const recommendations = await generateProjectRecommendations(project, metrics);
-            setProject(p => p ? { ...p, recommendations } : null);
+            
+            const markdownContent = `# AI-Generated Project Recommendations\n\n${recommendations.map(r => 
+                `## ${r.title} (${r.category})\n\n**Description:** ${r.description}\n\n**Actionable Step:** ${r.actionableStep}`
+            ).join('\n\n---\n\n')}`;
+            
+            const newDoc: MetaDocument = {
+                id: `meta-recs-${Date.now()}`,
+                name: `${project.name} - AI Recommendations`,
+                content: markdownContent,
+                type: 'recommendations-log',
+                createdAt: new Date(),
+            };
+
+            const existingDocIndex = project.metaDocuments?.findIndex(d => d.type === 'recommendations-log') ?? -1;
+            const updatedMetaDocs = [...(project.metaDocuments || [])];
+            if (existingDocIndex > -1) {
+                updatedMetaDocs[existingDocIndex] = newDoc;
+            } else {
+                updatedMetaDocs.push(newDoc);
+            }
+
+            updateProject({ ...project, recommendations, metaDocuments: updatedMetaDocs });
+
         } catch (error) {
             // silent error
         } finally {

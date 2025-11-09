@@ -3,7 +3,7 @@ import { Play, Check, LoaderCircle, GitBranch, Lock, RotateCcw } from 'lucide-re
 import { Remarkable } from 'remarkable';
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
-import { Project, Phase, Sprint, ToastMessage } from '../../types';
+import { Project, Phase, Sprint, ToastMessage, VersionedOutput } from '../../types';
 import { generateCriticalDesignSprints, generateSprintSpecification, selectModel, generateDesignReviewChecklist } from '../../services/geminiService';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
@@ -51,7 +51,13 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
         setExternalError('');
         try {
             const { preliminarySpec, sprints } = await generateCriticalDesignSprints(project, phase);
-            onUpdatePhase(phase.id, { output: preliminarySpec, sprints: sprints, status: 'in-progress' });
+            const newVersion: VersionedOutput = {
+                version: 1,
+                content: preliminarySpec,
+                reason: 'Initial specification and sprints generation',
+                createdAt: new Date(),
+            };
+            onUpdatePhase(phase.id, { outputs: [newVersion], sprints: sprints, status: 'in-progress' });
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred.');
         } finally {
@@ -67,9 +73,18 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
 
         try {
             const { technicalSpec, deliverables } = await generateSprintSpecification(project, phase, sprint);
-            const updatedSprints = phase.sprints.map(s =>
-                s.id === sprintId ? { ...s, output: technicalSpec, deliverables: deliverables } : s
-            );
+            const updatedSprints = phase.sprints.map(s => {
+                if (s.id === sprintId) {
+                    const newVersion: VersionedOutput = {
+                        version: (s.outputs.length || 0) + 1,
+                        content: technicalSpec,
+                        reason: 'Generated technical specification',
+                        createdAt: new Date(),
+                    };
+                    return { ...s, outputs: [...s.outputs, newVersion], deliverables: deliverables };
+                }
+                return s;
+            });
             onUpdatePhase(phase.id, { sprints: updatedSprints });
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred.');
@@ -80,21 +95,31 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
     
     const handleAcceptAndMerge = (sprintId: string) => {
         const sprint = phase.sprints.find(s => s.id === sprintId);
-        if (!sprint || !sprint.output) return;
+        if (!sprint || sprint.outputs.length === 0) return;
 
-        const updatedOutput = `${phase.output || ''}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n**Technical Specification:**\n\n${sprint.output}`;
+        const latestPhaseContent = phase.outputs[phase.outputs.length - 1]?.content || '';
+        const latestSprintContent = sprint.outputs[sprint.outputs.length - 1].content;
+
+        const updatedOutput = `${latestPhaseContent}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n**Technical Specification:**\n\n${latestSprintContent}`;
         const updatedSprints: Sprint[] = phase.sprints.map(s =>
             s.id === sprintId ? { ...s, status: 'completed' } : s
         );
-        onUpdatePhase(phase.id, { output: updatedOutput, sprints: updatedSprints });
+
+        const newVersion: VersionedOutput = {
+            version: (phase.outputs.length || 0) + 1,
+            content: updatedOutput,
+            reason: `Merged sprint: ${sprint.name}`,
+            createdAt: new Date(),
+        };
+        onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion], sprints: updatedSprints });
     };
 
     const handleCommitForReview = async () => {
-        if (!phase.output) return;
+        if (phase.outputs.length === 0) return;
         setIsLoading('commit');
         setExternalError('');
         try {
-            const checklist = await generateDesignReviewChecklist(phase.output);
+            const checklist = await generateDesignReviewChecklist(phase.outputs[phase.outputs.length - 1].content);
             const updates: Partial<Phase> = {
                 status: 'in-review',
                 designReview: { ...phase.designReview, checklist: checklist },
@@ -126,16 +151,24 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
     };
     
     const handleConfirmRevert = () => {
-        if (!sprintToRevert || !sprintToRevert.output) return;
+        if (!sprintToRevert || sprintToRevert.outputs.length === 0) return;
 
-        const revertMarker = `\n\n---\n\n### Completed Sprint: ${sprintToRevert.name}\n\n**Technical Specification:**\n\n${sprintToRevert.output}`;
-        const updatedOutput = phase.output?.replace(revertMarker, '') || '';
+        const sprintOutputToRevert = sprintToRevert.outputs[sprintToRevert.outputs.length - 1].content;
+        const revertMarker = `\n\n---\n\n### Completed Sprint: ${sprintToRevert.name}\n\n**Technical Specification:**\n\n${sprintOutputToRevert}`;
+        const latestPhaseContent = phase.outputs[phase.outputs.length - 1]?.content || '';
+        const updatedOutput = latestPhaseContent.replace(revertMarker, '');
         
         const updatedSprints = phase.sprints.map((s): Sprint => 
-            s.id === sprintToRevert.id ? { ...s, status: 'not-started', output: '', deliverables: [] } : s
+            s.id === sprintToRevert.id ? { ...s, status: 'not-started', outputs: [], deliverables: [] } : s
         );
         
-        onUpdatePhase(phase.id, { output: updatedOutput, sprints: updatedSprints });
+        const newVersion: VersionedOutput = {
+            version: (phase.outputs.length || 0) + 1,
+            content: updatedOutput,
+            reason: `Reverted sprint: ${sprintToRevert.name}`,
+            createdAt: new Date(),
+        };
+        onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion], sprints: updatedSprints });
         setToast({ message: `Reverted sprint: ${sprintToRevert.name}`, type: 'info' });
         setSprintToRevert(null);
     };
@@ -169,7 +202,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
         <>
             <Card title="Preliminary Design Specification" description="The high-level technical plan for this phase.">
                 <div className="bg-gray-50 dark:bg-charcoal-800 border dark:border-charcoal-700 rounded-lg p-4 max-h-96 overflow-y-auto prose dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: md.render(phase.output || '') }}
+                    dangerouslySetInnerHTML={{ __html: md.render(phase.outputs[phase.outputs.length - 1]?.content || '') }}
                 />
             </Card>
             <Card title="Development Sprints" description="Generate and merge the specification for each sprint to complete the Critical Design.">
@@ -195,7 +228,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                         </div>
                                     </div>
                                     <div className="ml-2 flex-shrink-0">
-                                       {!sprint.output && sprint.status !== 'completed' && (
+                                       {!sprint.outputs.length && sprint.status !== 'completed' && (
                                            <div className="flex items-center space-x-2">
                                                 <Button size="sm" onClick={() => handleGenerateSprintSpec(sprint.id)} disabled={!!isLoading || isLockedByDependency}>
                                                     {isLoading === sprint.id ? (
@@ -229,7 +262,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                     onUpdateAttachments={(attachments) => handleUpdateSprint(sprint.id, { attachments })}
                                 />
                                
-                               {sprint.output && (
+                               {sprint.outputs.length > 0 && (
                                    <div className="mt-4 pt-4 border-t dark:border-gray-700">
                                        <div className="text-sm text-gray-800 dark:text-gray-200">
                                            <h5 className="font-semibold mb-1">Key Deliverables:</h5>
@@ -238,7 +271,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                                            </ul>
                                        </div>
                                         <div className="mt-2 bg-gray-50 dark:bg-charcoal-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-64 overflow-y-auto prose dark:prose-invert max-w-none"
-                                            dangerouslySetInnerHTML={{ __html: md.render(sprint.output || '') }}
+                                            dangerouslySetInnerHTML={{ __html: md.render(sprint.outputs[sprint.outputs.length - 1]?.content || '') }}
                                         />
                                         {sprint.status !== 'completed' && (
                                             <div className="mt-2 flex justify-end items-center space-x-2">
@@ -263,7 +296,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                 </div>
             </Card>
 
-            {phase.output && (
+            {phase.outputs.length > 0 && (
                  <DiagramCard
                     phase={phase}
                     project={project}
@@ -290,8 +323,9 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                         phase={phase}
                         onMarkComplete={() => {}}
                         onDownload={() => {
-                            if (phase.output) {
-                                const blob = new Blob([phase.output], { type: 'text/markdown' });
+                            if (phase.outputs.length > 0) {
+                                const latestOutput = phase.outputs[phase.outputs.length - 1].content;
+                                const blob = new Blob([latestOutput], { type: 'text/markdown' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -302,7 +336,7 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                         }}
                         onGoToNext={onGoToNext}
                         isCompletable={false}
-                        isDownloadDisabled={!phase.output}
+                        isDownloadDisabled={phase.outputs.length === 0}
                     />
                 )}
             </div>

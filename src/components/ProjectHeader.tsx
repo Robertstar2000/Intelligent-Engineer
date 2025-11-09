@@ -8,6 +8,9 @@ interface ProjectHeaderProps {
   theme: string;
   setTheme: (theme: string) => void;
   showBackButton?: boolean;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  onSearch: (query: string) => void;
 }
 
 const ThemeToggleButton = ({ theme, setTheme }: { theme: string; setTheme: (theme: string) => void; }) => {
@@ -23,9 +26,14 @@ const ThemeToggleButton = ({ theme, setTheme }: { theme: string; setTheme: (them
     );
 };
 
-export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, setTheme, showBackButton = false }) => {
+export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, setTheme, showBackButton = false, searchQuery, setSearchQuery, onSearch }) => {
   const { project } = useProject();
-  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+        onSearch(searchQuery);
+    }
+  };
 
   return (
     <header className="flex items-center justify-between mb-8 gap-4">
@@ -49,6 +57,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, s
                 placeholder="Search projects or docs..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="w-full pl-10 pr-4 py-2 rounded-lg border bg-gray-100 dark:bg-charcoal-800 border-gray-200 dark:border-charcoal-700 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-colors"
             />
         </div>

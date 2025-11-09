@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Bot, Check, FileText, LoaderCircle, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
-import { Project, Phase, Sprint, ToastMessage } from '../types';
+import { Project, Phase, Sprint, ToastMessage, VersionedOutput } from '../types';
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { withRetry } from '../utils';
 
@@ -26,12 +26,14 @@ const getAi = () => {
 const serializeProjectDocs = (project: Project): { id: string, name: string, content: string }[] => {
     const docs: { id: string, name: string, content: string }[] = [];
     project.phases.forEach(phase => {
-        if (phase.output) {
-            docs.push({ id: `phase-${phase.id}`, name: phase.name, content: phase.output });
+        const latestOutput = phase.outputs[phase.outputs.length - 1];
+        if (latestOutput) {
+            docs.push({ id: `phase-${phase.id}`, name: phase.name, content: latestOutput.content });
         }
         phase.sprints.forEach(sprint => {
-            if (sprint.output) {
-                docs.push({ id: `sprint-${sprint.id}`, name: `${phase.name} / ${sprint.name}`, content: sprint.output });
+            const latestSprintOutput = sprint.outputs[sprint.outputs.length - 1];
+            if (latestSprintOutput) {
+                docs.push({ id: `sprint-${sprint.id}`, name: `${phase.name} / ${sprint.name}`, content: latestSprintOutput.content });
             }
         });
     });
@@ -76,7 +78,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             const ai = getAi();
             const allDocs = serializeProjectDocs(project);
             const context = allDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join('\n\n');
-            const systemInstruction = "You are an Orchestrator Agent. Your task is to analyze a change request and identify which documents are impacted. Return a JSON array of the document names that need editing.";
+            const systemInstruction = `You are an Orchestrator Agent. Your task is to analyze a change request and identify which documents are impacted. Return a JSON array of the document names that need editing. The project has these standards to follow: ${project.complianceStandards.join(', ')}.`;
             const userPrompt = `Project Context:\n${context}\n\nChange Request: "${changeRequest}"\n\nIdentify the impacted documents.`;
             
             const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
@@ -106,6 +108,8 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
     };
 
     const handleApplyChanges = async (docsToUpdate: ImpactedDoc[], allDocs: {id: string, name: string, content: string}[]) => {
+        if(!project) return;
+
         const fullContext = allDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join('\n\n');
         const ai = getAi();
         let finalDocs = [...docsToUpdate];
@@ -116,7 +120,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
 
             // DOER AGENT
             try {
-                const doerSystemInstruction = "You are a Doer Agent. You are an expert technical writer. Your task is to edit a document based on a change request, using the full project context. Return only the complete, updated document text. Do not add any commentary.";
+                const doerSystemInstruction = `You are a Doer Agent, an expert technical writer. Your task is to edit a document based on a change request, using the full project context. You must adhere to these compliance standards: ${project.complianceStandards.join(', ')}. Return only the complete, updated document text. Do not add any commentary.`;
                 const doerUserPrompt = `Full Project Context:\n${fullContext}\n\nDocument to Edit: "${doc.name}"\n---BEGIN DOCUMENT---\n${doc.originalContent}\n---END DOCUMENT---\n\nChange Request: "${changeRequest}"\n\nRewrite the document to incorporate the change.`;
                 const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
                 const newContent = doerResponse.text;
@@ -125,8 +129,8 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 setAgentStatus('qa');
 
                 // QA AGENT
-                const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
-                const qaUserPrompt = `Change Request: "${changeRequest}"\n\nOriginal Document:\n${doc.originalContent}\n\nNew Document:\n${newContent}\n\nVerify the change.`;
+                const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request and compliance standards. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
+                const qaUserPrompt = `Compliance Standards: ${project.complianceStandards.join(', ')}\nChange Request: "${changeRequest}"\n\nOriginal Document:\n${doc.originalContent}\n\nNew Document:\n${newContent}\n\nVerify the change.`;
                 const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }), 3);
                 const qaResult = JSON.parse(qaResponse.text);
 
@@ -147,23 +151,43 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             }
         }
         
-        // Persist changes to project state
+        // Persist changes to project state by creating new versions
         if (project) {
             let updatedProject = { ...project };
             finalDocs.forEach(doc => {
                  const [type, ...rest] = doc.id.split('-');
                  const id = rest.join('-');
                  updatedProject.phases = updatedProject.phases.map(phase => {
+                    let wasUpdated = false;
+                    let newPhase = { ...phase };
+
                     if (type === 'phase' && phase.id === id) {
-                        return { ...phase, output: doc.newContent };
+                        const newVersion: VersionedOutput = {
+                            version: newPhase.outputs.length + 1,
+                            content: doc.newContent!,
+                            reason: `Change Request: ${changeRequest}`,
+                            createdAt: new Date(),
+                        };
+                        newPhase.outputs = [...newPhase.outputs, newVersion];
+                        wasUpdated = true;
                     }
+                    
                     const sprintIndex = phase.sprints.findIndex(s => s.id === id);
                     if (sprintIndex > -1 && type === 'sprint') {
-                        const updatedSprints = [...phase.sprints];
-                        updatedSprints[sprintIndex].output = doc.newContent;
-                        return { ...phase, sprints: updatedSprints };
+                        const newSprints = [...newPhase.sprints];
+                        const targetSprint = newSprints[sprintIndex];
+                        const newVersion: VersionedOutput = {
+                            version: targetSprint.outputs.length + 1,
+                            content: doc.newContent!,
+                            reason: `Change Request: ${changeRequest}`,
+                            createdAt: new Date(),
+                        };
+                        newSprints[sprintIndex] = { ...targetSprint, outputs: [...targetSprint.outputs, newVersion]};
+                        newPhase.sprints = newSprints;
+                        wasUpdated = true;
                     }
-                    return phase;
+
+                    return wasUpdated ? newPhase : phase;
                  });
             });
             updateProject(updatedProject);

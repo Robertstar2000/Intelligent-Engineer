@@ -8,6 +8,30 @@ export const ENGINEERING_DISCIPLINES = [
   'Electronics Engineering', 'Manufacturing Engineering'
 ];
 
+export const COMPLIANCE_STANDARDS = [
+  // General & Software
+  'ISO/IEC 27001 (Information Security)',
+  'SOC 2 (Security, Availability, etc.)',
+  'GDPR (General Data Protection Regulation)',
+  'CCPA (California Consumer Privacy Act)',
+  'HIPAA (Health Information Portability)',
+  // Automotive
+  'ISO 26262 (Road vehicles – Functional safety)',
+  'A-SPICE (Automotive SPICE)',
+  // Aerospace
+  'DO-178C (Software in Airborne Systems)',
+  'AS9100D (Aerospace Quality Management)',
+  // Medical Devices
+  'ISO 13485 (Medical devices – QMS)',
+  'IEC 62304 (Medical device software)',
+  // Industrial & Safety
+  'IEC 61508 (Functional Safety of E/E/PE Systems)',
+  // Electronics
+  'FCC Part 15 (Radio Frequency Devices)',
+  'RoHS (Restriction of Hazardous Substances)',
+  'WEEE (Waste Electrical & Electronic Equipment)',
+];
+
 export const PROJECT_TEMPLATES = [
     {
         name: 'Custom Template',

@@ -12,13 +12,20 @@ export interface Message {
   timestamp: string;
 }
 
+export interface VersionedOutput {
+  version: number;
+  content: string;
+  reason: string;
+  createdAt: Date;
+}
+
 export interface Sprint {
   id:string;
   name: string;
   description: string;
   status: 'not-started' | 'in-progress' | 'completed';
   deliverables: string[];
-  output?: string;
+  outputs: VersionedOutput[];
   dependencies?: string[];
   notes?: string;
   attachments?: {
@@ -48,7 +55,7 @@ export interface Phase {
   status: 'not-started' | 'in-progress' | 'in-review' | 'completed';
   sprints: Sprint[];
   tuningSettings: TuningSettings;
-  output?: string;
+  outputs: VersionedOutput[];
   isEditable: boolean;
   diagramUrl?: string;
   designReview?: {
@@ -134,7 +141,8 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula';
+  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula' | 'recommendations-log' | 'team-roles-suggestion'
+    | 'threat-model-report' | 'compliance-traceability-matrix' | 'feasibility-study-report';
   createdAt: Date;
 }
 
@@ -143,9 +151,11 @@ export interface Project {
   name: string;
   description: string;
   userId: string;
+  templateName: string;
   requirements: string;
   constraints: string;
   disciplines: string[];
+  complianceStandards: string[];
   developmentMode: 'full' | 'rapid';
   automationMode: 'hmap' | 'automated';
   currentPhase: number;
@@ -168,4 +178,11 @@ export interface Project {
 export interface ToastMessage {
     message: string;
     type: 'success' | 'error' | 'info';
+}
+
+export interface SearchResult {
+    docId: string;
+    docName: string;
+    snippet: string;
+    query: string;
 }
