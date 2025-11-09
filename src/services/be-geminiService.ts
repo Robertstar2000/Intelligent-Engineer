@@ -6,6 +6,46 @@ import { withRetry } from '../utils';
 const PRO_MODEL = 'gemini-2.5-pro';
 const FLASH_MODEL = 'gemini-2.5-flash';
 
+export const EXTERNAL_TOOLS: { id: string; name: string; category: 'CAD' | 'Electronics'; requirements: { description: string; extension: string; outputType: string; qaPrompt: string; } }[] = [
+    {
+        id: 'solidworks', name: 'SolidWorks', category: 'CAD',
+        requirements: {
+            description: 'A VBA script (.swp) to generate a simplified 3D part. The script should define parameters (dimensions, materials) and use SolidWorks API calls like `CreateExtrusion` and `CreateCut` to build the geometry. Focus on the main features described in the asset.',
+            extension: 'swp',
+            outputType: 'SolidWorks VBA Script',
+            qaPrompt: 'Verify the output is a valid VBA script. Check for proper Sub/End Sub blocks, variable declarations (Dim), and calls to what look like SolidWorks API methods (e.g., Part.InsertSketch, FeatureManager.CreateExtrusion). The script should not contain any explanatory text outside of VBA comments (prefixed with \').'
+        }
+    },
+    {
+        id: 'fusion360', name: 'Fusion 360', category: 'CAD',
+        requirements: {
+            description: 'A Python script (.py) using the Fusion 360 API (adsk). The script should define parameters and use API calls to create sketches, extrusions, and other features to model the asset. The script should be self-contained and executable in Fusion 360\'s scripting environment.',
+            extension: 'py',
+            outputType: 'Fusion 360 Python Script',
+            qaPrompt: 'Verify the output is a valid Python script for Fusion 360. Check for imports like `import adsk.core, adsk.fusion, adsk.cam`. Look for a `run(context)` function definition. The code should use objects like `app.activeProduct.design` and methods like `sketches.add` and `features.extrudeFeatures.createInput`. It must be only Python code.'
+    
+        }
+    },
+    {
+        id: 'kicad', name: 'KiCad', category: 'Electronics',
+        requirements: {
+            description: 'A netlist file (.net) in KiCad\'s Pcbnew legacy format. It requires a list of components with their values and footprints, and a list of nets connecting the component pins. The output must be valid S-expression syntax (Lisp-like, with nested parentheses).',
+            extension: 'net',
+            outputType: 'KiCad Netlist',
+            qaPrompt: 'Verify the output is a valid KiCad netlist file using S-expressions. The file should start with `(export (version D) ...`. Check for balanced parentheses and keywords like `(components`, `(comp`, `(libsource`, `(nets`, and `(net`. It must be only the netlist content, no surrounding text.'
+        }
+    },
+    {
+        id: 'altium', name: 'Altium Designer', category: 'Electronics',
+        requirements: {
+            description: 'A comma-separated value (.csv) file for a Bill of Materials (BOM). The CSV should have columns like "Designator", "Footprint", "LibRef", "Quantity", and "Description". Extract component information from the project documents to populate this BOM.',
+            extension: 'csv',
+            outputType: 'Altium BOM CSV',
+            qaPrompt: 'Verify the output is a valid CSV file with a header row containing at least "Designator", "Footprint", and "Quantity". Subsequent rows should have comma-separated values corresponding to the headers. The output should only be the CSV data.'
+        }
+    }
+];
+
 // --- UTILITIES ---
 
 const toCamelCase = (s: string) => s.toLowerCase().replace(/[^a-zA-Z0-9]+(.)?/g, (m, chr) => chr ? chr.toUpperCase() : '');
@@ -418,7 +458,7 @@ const generateSingleVisualAssetForPhase = async (
         id: `meta-asset-${phase.id}-${toolType}-${Date.now()}`,
         name: docName,
         content: content,
-        type: toolType,
+        type: toolType as MetaDocument['type'],
         createdAt: new Date(),
     };
 };
@@ -770,6 +810,12 @@ const serializeProjectDocs = (project: Project): { id: string, name: string, con
             }
         });
     });
+    (project.metaDocuments || []).forEach(doc => {
+        // Exclude binary formats from context to avoid issues
+        if (!['3d-image-veo', '2d-image', 'diagram', 'wireframe', 'schematic'].includes(doc.type)) {
+            docs.push({ id: doc.id, name: doc.name, content: doc.content });
+        }
+    });
     return docs;
 };
 
@@ -860,6 +906,122 @@ export const runRiskAssessmentWorkflow = async (
 
     onProgress({ currentAgent: 'Done', iteration: maxIterations, logMessage: 'Workflow finished.' });
     return { finalRisks: foundRisks, logDocument };
+};
+
+export type ExportWorkflowProgress = {
+    status: 'orchestrating' | 'doing' | 'qa' | 'complete' | 'error';
+    log: string;
+};
+
+export const runIntegrationExportWorkflow = async (
+    project: Project,
+    asset: MetaDocument,
+    targetToolId: string,
+    onProgress: (progress: ExportWorkflowProgress) => void
+): Promise<{ fileName: string, fileContent: string }> => {
+    const ai = getAi();
+    const model = FLASH_MODEL; 
+
+    const tool = EXTERNAL_TOOLS.find(t => t.id === targetToolId);
+    if (!tool) {
+        throw new Error(`Invalid target tool: ${targetToolId}`);
+    }
+
+    const projectContext = getFullProjectContext(project);
+
+    // --- ORCHESTRATOR ---
+    onProgress({ status: 'orchestrating', log: 'Orchestrator is analyzing export requirements...' });
+    const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to analyze a specific asset from an engineering project and create a plan to export it for an external tool. Based on the target tool's requirements, determine what specific data points (e.g., dimensions, component names, connections, materials) need to be extracted from the project documentation. Your output should be a concise, step-by-step plan for the Doer agent. You must specify which documents in the project context are most relevant to consult.";
+    const orchestratorPrompt = `Project Context Summary:\n${getBasePromptContext(project)}\n\nAsset to Export ("${asset.name}"):\n${asset.type} asset available for export.\n\nTarget Tool: ${tool.name}\nTarget Tool Requirements:\n${tool.requirements.description}\n\nPlan the data extraction and formatting for the Doer Agent.`;
+    
+    const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
+    const plan = orchestratorResponse.text;
+    onProgress({ status: 'orchestrating', log: 'Orchestrator created a plan for the Doer.' });
+
+    // --- DOER ---
+    onProgress({ status: 'doing', log: 'Doer is generating the export file...' });
+    const doerSystemInstruction = `You are a Doer Agent, an expert in generating configuration and script files for various engineering software like ${tool.name}. Your task is to follow the plan from the Orchestrator to generate a file compatible with the target tool. You must read the provided project documents to find the necessary information. Your output must be ONLY the raw file content, exactly as specified in the target format. Do not add any commentary, explanations, or markdown code blocks.`;
+    const doerPrompt = `Orchestrator's Plan:\n${plan}\n\nFull Project Documentation:\n${projectContext}\n\nTarget Tool: ${tool.name}\nTarget File Format: ${tool.requirements.outputType}\n\nGenerate the file content now.`;
+    
+    const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: doerPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
+    let fileContent = doerResponse.text;
+
+    // Clean up markdown code blocks if the AI accidentally adds them
+    fileContent = fileContent.replace(/^```[a-zA-Z]*\n/gm, '').replace(/\n```$/gm, '');
+
+    // --- QA ---
+    onProgress({ status: 'qa', log: 'QA is validating the generated file...' });
+    const qaSystemInstruction = `You are a QA Agent. You must validate a generated file against the target tool's requirements. Respond ONLY with a JSON object: { "approved": boolean, "feedback": string }. Feedback is required if not approved.`;
+    const qaPrompt = `Generated File Content:\n${fileContent}\n\nTarget Tool: ${tool.name}\nValidation Criteria: ${tool.requirements.qaPrompt}\n\nDoes the file meet the criteria?`;
+    
+    const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model, contents: qaPrompt,
+        config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING } } } }
+    }), 3);
+    const qaResult = JSON.parse(qaResponse.text);
+
+    if (!qaResult.approved) {
+        throw new Error(`QA Failed: ${qaResult.feedback}`);
+    }
+    onProgress({ status: 'qa', log: 'QA has approved the file.' });
+
+    const fileName = `${asset.name.replace(/ /g, '_')}.${tool.requirements.extension}`;
+    return { fileName, fileContent };
+};
+
+export const runProjectExportWorkflow = async (
+    project: Project,
+    targetToolId: string,
+    onProgress: (progress: ExportWorkflowProgress) => void
+): Promise<{ fileName: string, fileContent: string }> => {
+    const ai = getAi();
+    const model = FLASH_MODEL; 
+
+    const tool = EXTERNAL_TOOLS.find(t => t.id === targetToolId);
+    if (!tool) {
+        throw new Error(`Invalid target tool: ${targetToolId}`);
+    }
+
+    const projectContext = getFullProjectContext(project);
+
+    // --- ORCHESTRATOR ---
+    onProgress({ status: 'orchestrating', log: 'Orchestrator is analyzing project-wide export requirements...' });
+    const orchestratorSystemInstruction = "You are an Orchestrator Agent. Your task is to analyze an entire engineering project's documentation and create a plan to export it for an external tool. Based on the target tool's requirements, determine what specific data points (e.g., dimensions, component names, connections, materials) need to be extracted from the entire project documentation. Your output should be a concise, step-by-step plan for the Doer agent, specifying which documents seem most relevant for each piece of data.";
+    const orchestratorPrompt = `Full Project Documentation:\n${projectContext}\n\nTarget Tool: ${tool.name}\nTarget Tool Requirements:\n${tool.requirements.description}\n\nPlan the data extraction and formatting for the Doer Agent.`;
+    
+    const orchestratorResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: orchestratorPrompt, config: { systemInstruction: orchestratorSystemInstruction } }), 3);
+    const plan = orchestratorResponse.text;
+    onProgress({ status: 'orchestrating', log: 'Orchestrator created a plan for the Doer.' });
+
+    // --- DOER ---
+    onProgress({ status: 'doing', log: 'Doer is generating the export file from all project documents...' });
+    const doerSystemInstruction = `You are a Doer Agent, an expert in generating configuration and script files for various engineering software like ${tool.name}. Your task is to follow the plan from the Orchestrator to generate a file compatible with the target tool. You must read all the provided project documents to find the necessary information. Your output must be ONLY the raw file content, exactly as specified in the target format. Do not add any commentary, explanations, or markdown code blocks.`;
+    const doerPrompt = `Orchestrator's Plan:\n${plan}\n\nFull Project Documentation:\n${projectContext}\n\nTarget Tool: ${tool.name}\nTarget File Format: ${tool.requirements.outputType}\n\nGenerate the file content now.`;
+    
+    const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model, contents: doerPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
+    let fileContent = doerResponse.text;
+
+    // Clean up markdown code blocks if the AI accidentally adds them
+    fileContent = fileContent.replace(/^```[a-zA-Z]*\n/gm, '').replace(/\n```$/gm, '').trim();
+
+    // --- QA ---
+    onProgress({ status: 'qa', log: 'QA is validating the generated file...' });
+    const qaSystemInstruction = `You are a QA Agent. You must validate a generated file against the target tool's requirements. Respond ONLY with a JSON object: { "approved": boolean, "feedback": string }. Feedback is required if not approved.`;
+    const qaPrompt = `Generated File Content:\n${fileContent}\n\nTarget Tool: ${tool.name}\nValidation Criteria: ${tool.requirements.qaPrompt}\n\nDoes the file meet the criteria?`;
+    
+    const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model, contents: qaPrompt,
+        config: { systemInstruction: qaSystemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.OBJECT, properties: { approved: { type: Type.BOOLEAN }, feedback: { type: Type.STRING } } } }
+    }), 3);
+    const qaResult = JSON.parse(qaResponse.text);
+
+    if (!qaResult.approved) {
+        throw new Error(`QA Failed: ${qaResult.feedback}`);
+    }
+    onProgress({ status: 'qa', log: 'QA has approved the file.' });
+
+    const fileName = `${project.name.replace(/ /g, '_')}_Export_for_${tool.name}.${tool.requirements.extension}`;
+    return { fileName, fileContent };
 };
 
 export const queryProjectData = async (project: Project, query: string): Promise<string> => {

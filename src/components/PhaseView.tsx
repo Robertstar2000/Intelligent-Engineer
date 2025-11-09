@@ -9,7 +9,6 @@ import { DesignReviewWorkflow } from './workflows/DesignReviewWorkflow';
 import { MultiDocPhaseWorkflow } from './workflows/MultiDocPhaseWorkflow';
 import { CriticalDesignPhaseWorkflow } from './workflows/CriticalDesignPhaseWorkflow';
 import { StandardPhaseWorkflow } from './workflows/StandardPhaseWorkflow';
-import { DiagramCard } from './DiagramCard';
 import { CommentsThread } from './CommentsThread';
 
 
@@ -83,6 +82,7 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
                     phase={localPhase}
                     project={project}
                     onUpdatePhase={handleUpdatePhase}
+                    onUpdateProject={updateProject}
                     onPhaseComplete={onPhaseComplete}
                     setExternalError={setGenerationError}
                     onGoToNext={onReturnToDashboard}
@@ -102,17 +102,6 @@ export const PhaseView: React.FC<PhaseViewProps> = ({ phase, onPhaseComplete, on
             {!process.env.API_KEY && <ApiKeyWarning />}
             {generationError && <GenerationError message={generationError} />}
             {renderWorkflow()}
-            
-            {localPhase.output && localPhase.status !== 'in-review' && (
-                <DiagramCard 
-                    phase={localPhase}
-                    project={project}
-                    updateProject={updateProject}
-                    onUpdatePhase={handleUpdatePhase}
-                    setExternalError={setGenerationError}
-                    setToast={setToast}
-                />
-            )}
 
             {localPhase.output && (
                  <CommentsThread

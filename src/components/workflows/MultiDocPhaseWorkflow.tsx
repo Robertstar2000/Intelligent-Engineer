@@ -9,6 +9,7 @@ import { MarkdownEditor } from '../MarkdownEditor';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
 import { ToolIntegration } from '../ToolIntegration';
+import { DiagramCard } from '../DiagramCard';
 
 declare const Prism: any;
 
@@ -117,8 +118,8 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         } else {
             finalUpdates.status = 'completed';
             onUpdatePhase(phase.id, finalUpdates);
-            setToast({ message: `${phase.name} phase completed! Advancing...`, type: 'success' });
-            setTimeout(() => onGoToNext(), 1500);
+            setToast({ message: `${phase.name} phase completed!`, type: 'success' });
+            setIsMerging(false);
         }
     };
     
@@ -154,113 +155,127 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
     const devSprintsGenerated = isPreliminaryDesign && phase.sprints.length > 2;
 
     return (
-        <Card title="Required Documents" description="Generate each document in sequence to complete this phase.">
-            <div className="space-y-4">
-                {phase.sprints.map((doc, index) => {
-                    const isLocked = index > 0 && phase.sprints[index - 1].status !== 'completed';
-                    return (
-                        <div key={doc.id} className={`p-4 rounded-lg border transition-colors duration-300 ${doc.status === 'completed' ? 'border-green-200 dark:border-green-700/50 bg-green-50 dark:bg-green-900/20' : isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 opacity-60' : 'bg-white dark:bg-charcoal-800/50 dark:border-charcoal-700'}`}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                    {loadingDocId === doc.id && <LoaderCircle className="w-5 h-5 text-brand-primary animate-spin flex-shrink-0" />}
-                                    <div>
-                                        <h4 className="font-semibold text-gray-900 dark:text-white">{index + 1}. {doc.name}</h4>
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">{doc.description}</p>
+        <>
+            <Card title="Required Documents" description="Generate each document in sequence to complete this phase.">
+                <div className="space-y-4">
+                    {phase.sprints.map((doc, index) => {
+                        const isLocked = index > 0 && phase.sprints[index - 1].status !== 'completed';
+                        return (
+                            <div key={doc.id} className={`p-4 rounded-lg border transition-colors duration-300 ${doc.status === 'completed' ? 'border-green-200 dark:border-green-700/50 bg-green-50 dark:bg-green-900/20' : isLocked ? 'bg-gray-100 dark:bg-charcoal-800/50 opacity-60' : 'bg-white dark:bg-charcoal-800/50 dark:border-charcoal-700'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        {loadingDocId === doc.id && <LoaderCircle className="w-5 h-5 text-brand-primary animate-spin flex-shrink-0" />}
+                                        <div>
+                                            <h4 className="font-semibold text-gray-900 dark:text-white">{index + 1}. {doc.name}</h4>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">{doc.description}</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
-                                    {doc.status === 'completed' ? <Check className="w-5 h-5 text-green-500" /> : (
-                                        <div className="flex items-center space-x-2">
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleGenerateSubDocument(doc.id)}
-                                                disabled={loadingDocId !== null || isLocked}
-                                            >
-                                                {loadingDocId === doc.id ? (
-                                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
-                                                ) : (
-                                                    <><Play className="mr-2 w-4 h-4" />Generate</>
-                                                )}
-                                            </Button>
-                                             <ModelBadge modelName={modelForGeneration} />
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            
-                            <div className="mt-2">
-                                <textarea
-                                    placeholder="Add notes..."
-                                    value={doc.notes || ''}
-                                    onChange={(e) => handleUpdateSprint(doc.id, { notes: e.target.value })}
-                                    className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-charcoal-700 dark:border-gray-600 focus:ring-brand-primary focus:border-brand-primary"
-                                    rows={2}
-                                />
-                            </div>
-                            <ToolIntegration
-                                sprint={doc}
-                                project={project}
-                                onUpdateProject={onUpdateProject}
-                                setToast={setToast}
-                            />
-                            <AttachmentManager
-                                sprint={doc}
-                                onUpdateAttachments={(attachments) => handleUpdateSprint(doc.id, { attachments })}
-                            />
-
-                            {doc.output && (
-                                <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
-                                    {editingSprintId === doc.id ? (
-                                         <div className="space-y-3">
-                                            <MarkdownEditor
-                                                value={editedSprintOutput}
-                                                onChange={setEditedSprintOutput}
-                                            />
-                                            <div className="flex space-x-2">
-                                                <Button size="sm" onClick={handleSaveSprint}>
-                                                    <Save className="mr-2 w-4 h-4" />Save
-                                                </Button>
-                                                <Button variant="outline" size="sm" onClick={() => setEditingSprintId(null)}>
-                                                    Cancel
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                             <div className="flex justify-end mb-2 space-x-2">
-                                                <Button variant="outline" size="sm" onClick={() => handleGenerateSubDocument(doc.id)} disabled={loadingDocId !== null}>
+                                    <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
+                                        {doc.status === 'completed' ? <Check className="w-5 h-5 text-green-500" /> : (
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleGenerateSubDocument(doc.id)}
+                                                    disabled={loadingDocId !== null || isLocked}
+                                                >
                                                     {loadingDocId === doc.id ? (
-                                                        <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
+                                                        <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Working...</>
                                                     ) : (
-                                                        <><RotateCcw className="mr-2 w-4 h-4" />Regenerate</>
+                                                        <><Play className="mr-2 w-4 h-4" />Generate</>
                                                     )}
                                                 </Button>
-                                                <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output || ''); }}>
-                                                    <Edit3 className="mr-2 w-4 h-4" />Edit
-                                                </Button>
+                                                 <ModelBadge modelName={modelForGeneration} />
                                             </div>
-                                            <div
-                                                className="bg-gray-50 dark:bg-charcoal-900/50 border dark:border-charcoal-700 rounded-lg p-4 max-h-64 overflow-y-auto prose dark:prose-invert max-w-none"
-                                                dangerouslySetInnerHTML={{ __html: md.render(doc.output || '') }}
-                                            />
-                                        </>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                                
+                                <div className="mt-2">
+                                    <textarea
+                                        placeholder="Add notes..."
+                                        value={doc.notes || ''}
+                                        onChange={(e) => handleUpdateSprint(doc.id, { notes: e.target.value })}
+                                        className="w-full p-2 text-sm border rounded-lg bg-white dark:bg-charcoal-700 dark:border-gray-600 focus:ring-brand-primary focus:border-brand-primary"
+                                        rows={2}
+                                    />
+                                </div>
+                                <ToolIntegration
+                                    sprint={doc}
+                                    project={project}
+                                    onUpdateProject={onUpdateProject}
+                                    setToast={setToast}
+                                />
+                                <AttachmentManager
+                                    sprint={doc}
+                                    onUpdateAttachments={(attachments) => handleUpdateSprint(doc.id, { attachments })}
+                                />
+
+                                {doc.output && (
+                                    <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
+                                        {editingSprintId === doc.id ? (
+                                             <div className="space-y-3">
+                                                <MarkdownEditor
+                                                    value={editedSprintOutput}
+                                                    onChange={setEditedSprintOutput}
+                                                />
+                                                <div className="flex space-x-2">
+                                                    <Button size="sm" onClick={handleSaveSprint}>
+                                                        <Save className="mr-2 w-4 h-4" />Save
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onClick={() => setEditingSprintId(null)}>
+                                                        Cancel
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                 <div className="flex justify-end mb-2 space-x-2">
+                                                    <Button variant="outline" size="sm" onClick={() => handleGenerateSubDocument(doc.id)} disabled={loadingDocId !== null}>
+                                                        {loadingDocId === doc.id ? (
+                                                            <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
+                                                        ) : (
+                                                            <><RotateCcw className="mr-2 w-4 h-4" />Regenerate</>
+                                                        )}
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.output || ''); }}>
+                                                        <Edit3 className="mr-2 w-4 h-4" />Edit
+                                                    </Button>
+                                                </div>
+                                                <div
+                                                    className="bg-gray-50 dark:bg-charcoal-900/50 border dark:border-charcoal-700 rounded-lg p-4 max-h-64 overflow-y-auto prose dark:prose-invert max-w-none"
+                                                    dangerouslySetInnerHTML={{ __html: md.render(doc.output || '') }}
+                                                />
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                     {initialPdDocsComplete && !devSprintsGenerated && (
+                        <div className="text-center p-4 border-2 border-dashed rounded-lg dark:border-charcoal-700">
+                            <p className="text-gray-600 dark:text-gray-400 mb-4">Initial designs complete. Generate the next set of development sprints based on this work.</p>
+                            <Button onClick={handleGenerateDevSprints} disabled={isLoadingSprints}>
+                                {isLoadingSprints ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Zap className="mr-2 w-4 h-4" />}
+                                Generate Development Sprints
+                            </Button>
                         </div>
-                    );
-                })}
-                 {initialPdDocsComplete && !devSprintsGenerated && (
-                    <div className="text-center p-4 border-2 border-dashed rounded-lg dark:border-charcoal-700">
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">Initial designs complete. Generate the next set of development sprints based on this work.</p>
-                        <Button onClick={handleGenerateDevSprints} disabled={isLoadingSprints}>
-                            {isLoadingSprints ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Zap className="mr-2 w-4 h-4" />}
-                            Generate Development Sprints
-                        </Button>
-                    </div>
-                )}
-            </div>
-             <div className="mt-6">
+                    )}
+                </div>
+            </Card>
+
+            {phase.output && (
+                 <DiagramCard
+                    phase={phase}
+                    project={project}
+                    onUpdatePhase={onUpdatePhase}
+                    updateProject={onUpdateProject}
+                    setExternalError={setExternalError}
+                    setToast={setToast}
+                />
+            )}
+            
+            <div className="mt-6">
                 {phase.status !== 'completed' ? (
                     <div className="flex justify-end">
                         <Button onClick={handleMergeAndComplete} disabled={!allDocsGenerated || isMerging}>
@@ -289,6 +304,6 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                     />
                 )}
             </div>
-        </Card>
+        </>
     );
 };

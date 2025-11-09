@@ -6,6 +6,7 @@ import { Phase, Sprint, ToastMessage } from '../types';
 import { ProjectHeader } from '../components/ProjectHeader';
 import { RiskEnginePanel } from '../components/RiskEnginePanel';
 import { ChangeManagementPanel } from '../components/ChangeManagementPanel';
+import { ProjectExportPanel } from '../components/ProjectExportPanel';
 
 const getSprintStatusIcon = (status: Sprint['status']) => {
     switch (status) {
@@ -41,6 +42,9 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
   const isAutomating = automationStatus === 'running';
   
   if (!project) return null;
+
+  const preliminaryDesignPhase = project.phases.find(p => p.name === 'Preliminary Design');
+  const showExportPanel = preliminaryDesignPhase && preliminaryDesignPhase.status === 'completed';
 
   const handleSaveDetails = () => {
     updateProjectDetails(project.id, { requirements: editedRequirements, constraints: editedConstraints });
@@ -225,6 +229,7 @@ export const Dashboard = ({ onSelectPhase, onViewDocuments, onViewAnalytics, onV
                 {renderAutomationControls()}
                 <RiskEnginePanel />
                 <ChangeManagementPanel setToast={setToast} />
+                {showExportPanel && <ProjectExportPanel setToast={setToast} />}
             </div>
             <div className="space-y-6">
                 <Card title="Project Status">

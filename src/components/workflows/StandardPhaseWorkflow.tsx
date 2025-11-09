@@ -4,18 +4,20 @@ import { TuningControls } from '../TuningControls';
 import { PhaseOutput } from '../PhaseOutput';
 import { PhaseActions } from '../PhaseActions';
 import { Project, Phase, ToastMessage } from '../../types';
+import { DiagramCard } from '../DiagramCard';
 
 interface WorkflowProps {
     phase: Phase;
     project: Project;
     onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
+    onUpdateProject: (updatedProject: Project) => void;
     onPhaseComplete: () => void;
     setExternalError: (message: string) => void;
     onGoToNext: () => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, setToast }: WorkflowProps) => {
+export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateProject, onPhaseComplete, setExternalError, onGoToNext, setToast }: WorkflowProps) => {
     const [isLoading, setIsLoading] = useState(false);
     const [tuningSettings, setTuningSettings] = useState(phase.tuningSettings);
     const modelForGeneration = selectModel({ phase, tuningSettings });
@@ -55,8 +57,8 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
             }
         } else {
             onUpdatePhase(phase.id, { status: 'completed' });
-            setToast({ message: `${phase.name} phase completed! Advancing...`, type: 'success' });
-            setTimeout(() => onGoToNext(), 1500);
+            setToast({ message: `${phase.name} phase completed!`, type: 'success' });
+            setIsLoading(false);
         }
     };
 
@@ -77,7 +79,7 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
     };
 
     return (
-        <>
+        <div className="space-y-6">
             {phase.isEditable && phase.status !== 'completed' && (
                 <TuningControls
                     settings={tuningSettings}
@@ -95,6 +97,16 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 apiKey={process.env.API_KEY || null}
                 modelName={modelForGeneration}
             />
+            {phase.output && (
+                 <DiagramCard
+                    phase={phase}
+                    project={project}
+                    onUpdatePhase={onUpdatePhase}
+                    updateProject={onUpdateProject}
+                    setExternalError={setExternalError}
+                    setToast={setToast}
+                />
+            )}
             <PhaseActions
                 phase={phase}
                 onMarkComplete={handleMarkComplete}
@@ -104,6 +116,6 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 reviewRequired={phase.designReview?.required}
                 isDownloadDisabled={!phase.output}
             />
-        </>
+        </div>
     );
 };

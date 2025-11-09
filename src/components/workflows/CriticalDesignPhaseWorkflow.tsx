@@ -9,6 +9,7 @@ import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
 import { ToolIntegration } from '../ToolIntegration';
 import { ConfirmationModal } from '../ConfirmationModal';
+import { DiagramCard } from '../DiagramCard';
 
 declare const Prism: any;
 
@@ -260,39 +261,52 @@ export const CriticalDesignPhaseWorkflow = ({ phase, project, onUpdatePhase, onP
                         );
                     })}
                 </div>
-                 <div className="mt-6">
-                    {phase.status !== 'completed' ? (
-                        <div className="flex justify-between items-center">
-                            <Button variant="outline" onClick={handleRevertLastSprint} disabled={completedSprintIds.size === 0 || !!isLoading}>
-                                <RotateCcw className="mr-2 w-4 h-4" /> Revert Last Sprint
-                            </Button>
-                            <Button onClick={handleCommitForReview} disabled={!allSprintsAccepted || !!isLoading}>
-                                {isLoading === 'commit' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Check className="mr-2 w-4 h-4" />}
-                                Commit for Design Review
-                            </Button>
-                        </div>
-                    ) : (
-                        <PhaseActions 
-                            phase={phase}
-                            onMarkComplete={() => {}}
-                            onDownload={() => {
-                                if (phase.output) {
-                                    const blob = new Blob([phase.output], { type: 'text/markdown' });
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `${project.name}_${phase.name}.md`;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                }
-                            }}
-                            onGoToNext={onGoToNext}
-                            isCompletable={false}
-                            isDownloadDisabled={!phase.output}
-                        />
-                    )}
-                </div>
             </Card>
+
+            {phase.output && (
+                 <DiagramCard
+                    phase={phase}
+                    project={project}
+                    onUpdatePhase={onUpdatePhase}
+                    updateProject={onUpdateProject}
+                    setExternalError={setExternalError}
+                    setToast={setToast}
+                />
+            )}
+            
+            <div className="mt-6">
+                {phase.status !== 'completed' ? (
+                    <div className="flex justify-between items-center">
+                        <Button variant="outline" onClick={handleRevertLastSprint} disabled={completedSprintIds.size === 0 || !!isLoading}>
+                            <RotateCcw className="mr-2 w-4 h-4" /> Revert Last Sprint
+                        </Button>
+                        <Button onClick={handleCommitForReview} disabled={!allSprintsAccepted || !!isLoading}>
+                            {isLoading === 'commit' ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Check className="mr-2 w-4 h-4" />}
+                            Commit for Design Review
+                        </Button>
+                    </div>
+                ) : (
+                    <PhaseActions 
+                        phase={phase}
+                        onMarkComplete={() => {}}
+                        onDownload={() => {
+                            if (phase.output) {
+                                const blob = new Blob([phase.output], { type: 'text/markdown' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${project.name}_${phase.name}.md`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }
+                        }}
+                        onGoToNext={onGoToNext}
+                        isCompletable={false}
+                        isDownloadDisabled={!phase.output}
+                    />
+                )}
+            </div>
+
             <ConfirmationModal
                 isOpen={!!sprintToRevert}
                 onClose={() => setSprintToRevert(null)}

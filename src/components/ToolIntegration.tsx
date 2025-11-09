@@ -1,51 +1,140 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2, FlaskConical } from 'lucide-react';
+import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2, FlaskConical, Download } from 'lucide-react';
 import { Project, Sprint, ToastMessage, MetaDocument } from '../types';
 import { Button, Card, Badge } from './ui';
-import { generateStandardVisualAsset, generateAdvancedAsset } from '../services/geminiService';
+import { generateStandardVisualAsset, generateAdvancedAsset, EXTERNAL_TOOLS, runIntegrationExportWorkflow, ExportWorkflowProgress } from '../services/geminiService';
 
 declare const Prism: any;
 
-const EXTERNAL_TOOLS_LIST = [
-    { id: 'solidworks', name: 'SolidWorks', category: 'CAD' },
-    { id: 'autocad', name: 'AutoCAD', category: 'CAD' },
-    { id: 'fusion360', name: 'Fusion 360', category: 'CAD' },
-    { id: 'altium', name: 'Altium Designer', category: 'Electronics' },
-    { id: 'kicad', name: 'KiCad', category: 'Electronics' },
-];
+const downloadFile = (filename: string, content: string) => {
+    const element = document.createElement('a');
+    const file = new Blob([content], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = filename;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+};
 
-const ExportModal = ({ isOpen, onClose, assetName, setToast }) => {
+type AgentStatus = 'idle' | 'orchestrating' | 'doing' | 'qa' | 'complete' | 'error';
+
+const ExportModal = ({ isOpen, onClose, asset, project, setToast }) => {
     const [selectedTool, setSelectedTool] = useState('');
-    if (!isOpen) return null;
+    const [agentStatus, setAgentStatus] = useState<AgentStatus>('idle');
+    const [log, setLog] = useState<string[]>([]);
+    const [error, setError] = useState('');
+    const [generatedFile, setGeneratedFile] = useState<{ fileName: string; fileContent: string } | null>(null);
 
-    const handleExport = () => {
-        if (!selectedTool) {
+    useEffect(() => {
+        if (isOpen) {
+            setAgentStatus('idle');
+            setLog([]);
+            setError('');
+            setGeneratedFile(null);
+            setSelectedTool('');
+        }
+    }, [isOpen]);
+
+    const handleExport = async () => {
+        if (!selectedTool || !project || !asset) {
             setToast({ message: 'Please select a tool to export to.', type: 'error' });
             return;
         }
-        const tool = EXTERNAL_TOOLS_LIST.find(t => t.id === selectedTool);
-        setToast({ message: `Asset "${assetName}" has been exported to ${tool.name}.`, type: 'success' });
-        onClose();
+
+        setAgentStatus('orchestrating');
+        setLog(['Workflow initiated...']);
+        setError('');
+        setGeneratedFile(null);
+
+        try {
+            const result = await runIntegrationExportWorkflow(
+                project,
+                asset,
+                selectedTool,
+                (progress: ExportWorkflowProgress) => {
+                    setAgentStatus(progress.status);
+                    setLog(prev => [...prev, progress.log]);
+                }
+            );
+            setGeneratedFile(result);
+            setAgentStatus('complete');
+            setToast({ message: `Successfully generated file for ${EXTERNAL_TOOLS.find(t => t.id === selectedTool)?.name}.`, type: 'success' });
+        } catch (err: any) {
+            setError(err.message || 'An unknown error occurred during the export workflow.');
+            setAgentStatus('error');
+        }
+    };
+    
+    if (!isOpen) return null;
+
+    const renderContent = () => {
+        switch (agentStatus) {
+            case 'idle':
+                return (
+                    <div className="space-y-4">
+                        <p>Select a compatible commercial tool to generate an export file for the asset: <strong>{asset.name}</strong>.</p>
+                        <select value={selectedTool} onChange={e => setSelectedTool(e.target.value)} className="w-full p-2 border rounded-lg bg-white dark:bg-charcoal-700 dark:border-gray-600">
+                            <option value="" disabled>Select a tool...</option>
+                            {EXTERNAL_TOOLS.map(tool => <option key={tool.id} value={tool.id}>{tool.name} ({tool.category})</option>)}
+                        </select>
+                        <div className="flex justify-end space-x-2">
+                            <Button variant="outline" onClick={onClose}>Cancel</Button>
+                            <Button onClick={handleExport} disabled={!selectedTool}>Generate Export</Button>
+                        </div>
+                    </div>
+                );
+            case 'orchestrating':
+            case 'doing':
+            case 'qa':
+                return (
+                    <div>
+                        <div className="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-charcoal-900/50 rounded-md">
+                            <LoaderCircle className="w-4 h-4 text-brand-primary animate-spin" />
+                            <span className="text-sm font-semibold capitalize">{agentStatus}...</span>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 max-h-40 overflow-y-auto space-y-1">
+                            {log.map((l, i) => <p key={i}>- {l}</p>)}
+                        </div>
+                    </div>
+                );
+            case 'complete':
+                return (
+                    <div className="text-center space-y-3">
+                        <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
+                        <h3 className="font-semibold">Export File Generated!</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Your file <code className="bg-gray-200 dark:bg-charcoal-900 p-1 rounded-sm">{generatedFile?.fileName}</code> is ready for download.</p>
+                        <div className="flex justify-center space-x-2 pt-2">
+                             <Button variant="outline" onClick={onClose}>Close</Button>
+                             <Button onClick={() => downloadFile(generatedFile.fileName, generatedFile.fileContent)}>
+                                <Download className="w-4 h-4 mr-2" /> Download
+                             </Button>
+                        </div>
+                    </div>
+                );
+            case 'error':
+                 return (
+                    <div className="text-center space-y-3">
+                        <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
+                        <h3 className="font-semibold">An Error Occurred</h3>
+                        <p className="text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20 p-2 rounded-md">{error}</p>
+                         <div className="flex justify-center space-x-2 pt-2">
+                            <Button variant="outline" onClick={onClose}>Close</Button>
+                            <Button onClick={() => setAgentStatus('idle')}>Try Again</Button>
+                        </div>
+                    </div>
+                );
+        }
     };
 
     return (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
-            <Card title="Export to External Tool" className="w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <div className="space-y-4">
-                    <p>Select a compatible commercial tool to export the asset to.</p>
-                    <select value={selectedTool} onChange={e => setSelectedTool(e.target.value)} className="w-full p-2 border rounded-lg bg-white dark:bg-charcoal-700 dark:border-gray-600">
-                        <option value="" disabled>Select a tool...</option>
-                        {EXTERNAL_TOOLS_LIST.map(tool => <option key={tool.id} value={tool.id}>{tool.name} ({tool.category})</option>)}
-                    </select>
-                    <div className="flex justify-end space-x-2">
-                        <Button variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button onClick={handleExport}>Export</Button>
-                    </div>
-                </div>
+            <Card title="Agentic Asset Export" className="w-full max-w-md" onClick={e => e.stopPropagation()}>
+                {renderContent()}
             </Card>
         </div>
     );
 };
+
 
 interface ToolIntegrationProps {
     sprint: Sprint;
@@ -54,12 +143,12 @@ interface ToolIntegrationProps {
     setToast: (toast: ToastMessage | null) => void;
 }
 
-type AgentStatus = 'idle' | 'orchestrating' | 'generating' | 'generating-video' | 'qa' | 'complete' | 'error';
+type GenerationStatus = 'idle' | 'orchestrating' | 'generating' | 'generating-video' | 'qa' | 'complete' | 'error';
 type StandardToolType = 'wireframe' | 'diagram' | 'schematic';
 type AdvancedToolType = 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula';
 
 export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, project, onUpdateProject, setToast }) => {
-    const [agentStatus, setAgentStatus] = useState<AgentStatus>('idle');
+    const [agentStatus, setAgentStatus] = useState<GenerationStatus>('idle');
     const [error, setError] = useState('');
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     
@@ -99,6 +188,7 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
                  asset = await generateStandardVisualAsset(project, sprint, toolType as StandardToolType);
             } else {
                 if (toolType === '3d-image-veo') setAgentStatus('generating-video');
+                else setAgentStatus('generating');
                 asset = await generateAdvancedAsset(project, sprint, toolType as AdvancedToolType);
             }
 
@@ -141,7 +231,7 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
     };
     
     const AgentStatusDisplay = () => {
-        const statusMap: { [key in AgentStatus]?: { icon: React.ReactNode; text: string } } = {
+        const statusMap: { [key in GenerationStatus]?: { icon: React.ReactNode; text: string } } = {
             orchestrating: { icon: <LoaderCircle className="animate-spin" />, text: 'Orchestrator: Crafting prompt...' },
             generating: { icon: <LoaderCircle className="animate-spin" />, text: 'Doer: Generating asset...' },
             'generating-video': { icon: <LoaderCircle className="animate-spin" />, text: 'VEO: Generating video (this may take a few minutes)...' },
@@ -195,7 +285,7 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
                         <RefreshCw className="w-4 h-4 mr-2"/>Regenerate
                     </Button>
                 </div>
-                <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} assetName={generatedAsset.name} setToast={setToast} />
+                <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} asset={generatedAsset} project={project} setToast={setToast} />
             </div>
         );
     };

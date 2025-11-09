@@ -38,6 +38,28 @@ const serializeProjectDocs = (project: Project): { id: string, name: string, con
     return docs;
 };
 
+const AgentStatusDisplay = ({ status, error }: { status: AgentStatus; error?: string }) => {
+    const statusMap: { [key in AgentStatus]?: { icon: React.ReactNode; text: string } } = {
+        orchestrating: { icon: <LoaderCircle className="animate-spin" />, text: 'Orchestrator: Analyzing impact...' },
+        doing: { icon: <LoaderCircle className="animate-spin" />, text: 'Doer: Applying changes...' },
+        qa: { icon: <LoaderCircle className="animate-spin" />, text: 'QA: Validating edits...' },
+        complete: { icon: <Check className="" />, text: 'Change request complete.' },
+        error: { icon: <X className="" />, text: 'An error occurred.' },
+    };
+
+    const currentStatus = statusMap[status];
+    if (!currentStatus || status === 'idle') return null;
+
+    const baseClasses = 'flex items-center space-x-2 text-sm p-2 rounded-md';
+    const colorClasses = status === 'complete' 
+        ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300'
+        : status === 'error'
+        ? 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300'
+        : 'bg-gray-100 dark:bg-charcoal-900/50 text-gray-700 dark:text-gray-300';
+    
+    return <div className={`${baseClasses} ${colorClasses}`}>{currentStatus.icon}<span>{currentStatus.text}</span></div>;
+};
+
 export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMessage | null) => void }) => {
     const { project, updateProject } = useProject();
     const [changeRequest, setChangeRequest] = useState('');
@@ -100,6 +122,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 const newContent = doerResponse.text;
                 finalDocs[i] = { ...doc, newContent: newContent };
                 setImpactedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, newContent, status: 'validating' } : d));
+                setAgentStatus('qa');
 
                 // QA AGENT
                 const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
@@ -110,6 +133,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 if (qaResult.approved) {
                     finalDocs[i] = { ...finalDocs[i], status: 'complete' };
                     setImpactedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'complete' } : d));
+                    setAgentStatus(i < finalDocs.length - 1 ? 'doing' : 'complete');
                 } else {
                     throw new Error(qaResult.feedback || 'QA rejected the change.');
                 }
@@ -187,7 +211,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                         <span>Note: This process only updates text documents. Please manually review any related diagrams or visual assets.</span>
                     </div>
 
-                    {agentStatus === 'orchestrating' && <div className="flex items-center text-sm p-2"><LoaderCircle className="w-4 h-4 animate-spin mr-2"/>Orchestrator is analyzing impact...</div>}
+                    <AgentStatusDisplay status={agentStatus} />
                     
                     {impactedDocs.length > 0 && (
                         <div className="space-y-2">
