@@ -46,7 +46,7 @@ export const PhaseHeader = ({ phase, disciplines, onUpdatePhase }: PhaseHeaderPr
                             type="text"
                             value={editedName}
                             onChange={(e) => setEditedName(e.target.value)}
-                            className="text-2xl font-bold bg-transparent border-b-2 border-brand-primary/50 focus:outline-none focus:border-white"
+                            className="text-2xl font-bold bg-white/10 dark:bg-charcoal-700 border border-brand-primary/50 focus:outline-none focus:border-white rounded-md px-2 py-1"
                         />
                     ) : (
                         <h1 className="text-2xl font-bold">{phase.name}</h1>
@@ -68,7 +68,7 @@ export const PhaseHeader = ({ phase, disciplines, onUpdatePhase }: PhaseHeaderPr
                     <textarea
                         value={editedDescription}
                         onChange={(e) => setEditedDescription(e.target.value)}
-                        className="w-full text-gray-300 bg-transparent border-b-2 border-brand-primary/50 focus:outline-none focus:border-white text-sm"
+                        className="w-full text-gray-300 bg-white/10 dark:bg-charcoal-700 border border-brand-primary/50 focus:outline-none focus:border-white text-sm rounded-md p-2"
                         rows={2}
                     />
                     <div className="flex justify-end space-x-2 mt-2">

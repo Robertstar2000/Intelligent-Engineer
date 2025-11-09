@@ -13,9 +13,9 @@ export const withRetry = async <T>(fn: () => Promise<T>, retries = 3): Promise<T
       const delay = isRateLimitError ? 70000 : 2000; // 70s for rate limit, 2s for others
 
       if (isRateLimitError) {
-        console.warn(`Rate limit detected. Waiting ${delay / 1000}s before retrying... (${retries} retries left)`);
+        console.warn(`[Vibe] Rate limit detected. Waiting ${delay / 1000}s before retrying... (${retries} retries left)`);
       } else {
-        console.warn(`Request failed. Retrying in ${delay / 1000}s... (${retries} retries left)`, error.message);
+        console.warn(`[Vibe] Request failed. Retrying in ${delay / 1000}s... (${retries} retries left)`, error.message);
       }
       
       await new Promise(res => setTimeout(res, delay));

@@ -35,54 +35,68 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
     if (!currentUser) return;
     setStep(6); // Move to the finalizing step
     
-    const basePhases: Phase[] = [
-        { id: '1', name: 'Requirements', description: 'Define clear functional and performance objectives', status: 'not-started', 
+    const basePhasesData = [
+        { name: 'Requirements', description: 'Define clear functional and performance objectives', 
             sprints: [
-                { id: '1-1', name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.', status: 'not-started', deliverables: [], output: '' },
-                { id: '1-2', name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.', status: 'not-started', deliverables: [], output: '' },
-                { id: '1-3', name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.', status: 'not-started', deliverables: [], output: '' },
+                { name: 'Project Scope', description: 'A high-level document outlining the project\'s purpose, objectives, and deliverables.' },
+                { name: 'Statement of Work (SOW)', description: 'A formal document detailing the work activities, deliverables, and timeline.' },
+                { name: 'Technical Requirements Specification', description: 'A detailed specification of the technical requirements, including performance, reliability, and safety.' },
             ], 
             tuningSettings: requirementsTuning, isEditable: true, designReview: { required: false, checklist: [] } 
         },
         { 
-            id: '2', name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies', status: 'not-started', 
+            name: 'Preliminary Design', description: 'Create and compare initial concepts via trade studies', 
             sprints: [
-                { id: '2-1', name: 'Conceptual Design Options', description: 'Generate several distinct high-level design concepts to address the project requirements.', status: 'not-started', deliverables: [], output: '' },
-                { id: '2-2', name: 'Trade Study Analysis', description: 'Conduct a formal trade study to compare the generated concepts against weighted criteria and select the optimal path forward.', status: 'not-started', deliverables: [], output: '' },
-                { id: '2-3', name: 'Design Review Checklist', description: 'A formal checklist to verify all preliminary design requirements and success criteria have been met before proceeding.', status: 'not-started', deliverables: [], output: '' },
+                { name: 'Conceptual Design Options', description: 'Generate several distinct high-level design concepts to address the project requirements.' },
+                { name: 'Trade Study Analysis', description: 'Conduct a formal trade study to compare the generated concepts against weighted criteria and select the optimal path forward.' },
+                { name: 'Design Review Checklist', description: 'A formal checklist to verify all preliminary design requirements and success criteria have been met before proceeding.' },
             ], 
             tuningSettings: { creativity: 80, costOptimization: 50, performanceBias: 70, modularity: 60 }, isEditable: true, designReview: { required: true, checklist: [] } 
         },
-        { id: '3', name: 'Critical Design', description: 'Develop a detailed, comprehensive design specification and implementation sprints', status: 'not-started', sprints: [], tuningSettings: { technicalDepth: 90, failureAnalysis: 70, manufacturability: 60, standardsAdherence: 85 }, isEditable: true, designReview: { required: true, checklist: [] } },
+        { name: 'Critical Design', description: 'Develop a detailed, comprehensive design specification and implementation sprints', sprints: [], tuningSettings: { technicalDepth: 90, failureAnalysis: 70, manufacturability: 60, standardsAdherence: 85 }, isEditable: true, designReview: { required: true, checklist: [] } },
         { 
-            id: '4', name: 'Testing', description: 'Develop formal Verification and Validation plans', status: 'not-started', 
+            name: 'Testing', description: 'Develop formal Verification and Validation plans', 
             sprints: [
-                { id: '4-1', name: 'Verification Plan', description: 'Define tests to confirm the system is built correctly to specifications ("Are we building the product right?").', status: 'not-started', deliverables: [], output: '' },
-                { id: '4-2', name: 'Validation Plan', description: 'Define tests to confirm the system meets user needs and requirements ("Are we building the right product?").', status: 'not-started', deliverables: [], output: '' },
+                { name: 'Verification Plan', description: 'Define tests to confirm the system is built correctly to specifications ("Are we building the product right?").' },
+                { name: 'Validation Plan', description: 'Define tests to confirm the system meets user needs and requirements ("Are we building the right product?").' },
             ], 
             tuningSettings: { coverage: 90, edgeCaseFocus: 75, automationPriority: 80, destructiveTesting: 40 }, isEditable: true, designReview: { required: false, checklist: [] } 
         },
-        { id: '5', name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', status: 'not-started', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: true, designReview: { required: false, checklist: [] } },
-        { id: '6', name: 'Operation', description: 'Create an operations and maintenance manual', status: 'not-started', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: true, designReview: { required: false, checklist: [] } },
-        { id: '7', name: 'Improvement', description: 'Identify and prioritize future improvements', status: 'not-started', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: true, designReview: { required: false, checklist: [] } }
+        { name: 'Launch', description: 'Formulate a detailed launch and deployment strategy', sprints: [], tuningSettings: { phasedRollout: 70, rollbackPlan: 90, marketingCoordination: 50, userTraining: 60 }, isEditable: true, designReview: { required: false, checklist: [] } },
+        { name: 'Operation', description: 'Create an operations and maintenance manual', sprints: [], tuningSettings: { monitoring: 90, preventativeMaintenance: 80, supportProtocol: 70, incidentResponse: 85 }, isEditable: true, designReview: { required: false, checklist: [] } },
+        { name: 'Improvement', description: 'Identify and prioritize future improvements', sprints: [], tuningSettings: { userFeedback: 80, performanceAnalysis: 90, featureRoadmap: 70, competitiveLandscape: 60 }, isEditable: true, designReview: { required: false, checklist: [] } }
       ];
-
-    let finalPhases = basePhases;
+    
+    let tailoredDescriptions = {};
     if (process.env.API_KEY) {
         try {
-            const phaseList = basePhases.map(p => ({ name: p.name, description: p.description }));
-            const tailoredDescriptions = await generateTailoredPhaseDescriptions(projectData.disciplines, phaseList);
-            finalPhases = basePhases.map(phase => ({
-                ...phase,
-                description: tailoredDescriptions[phase.name] || phase.description,
-            }));
+            const phaseList = basePhasesData.map(p => ({ name: p.name, description: p.description }));
+            tailoredDescriptions = await generateTailoredPhaseDescriptions(projectData.disciplines, phaseList);
         } catch (error) {
             console.error("Could not tailor phase descriptions, using defaults.", error);
         }
     }
 
+    const finalPhases: Phase[] = basePhasesData.map(phaseData => ({
+        id: crypto.randomUUID(),
+        name: phaseData.name,
+        description: (tailoredDescriptions as any)[phaseData.name] || phaseData.description,
+        status: 'not-started',
+        sprints: phaseData.sprints.map(sprintData => ({
+            id: crypto.randomUUID(),
+            name: sprintData.name,
+            description: sprintData.description,
+            status: 'not-started',
+            deliverables: [],
+            output: '',
+        })),
+        tuningSettings: phaseData.tuningSettings,
+        isEditable: phaseData.isEditable,
+        designReview: phaseData.designReview,
+    }));
+
     const newProject: Project = {
-      id: Date.now().toString(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
+      id: crypto.randomUUID(), userId: currentUser.id, ...projectData, developmentMode, currentPhase: 0, createdAt: new Date(), automationMode: 'hmap',
       compactedContext: '',
       metaDocuments: [],
       users: [currentUser],

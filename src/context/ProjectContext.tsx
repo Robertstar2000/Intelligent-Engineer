@@ -124,7 +124,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     const addComment = (projectId: string, phaseId: string, text: string) => {
         if (!currentUser) return;
         const newComment: Comment = {
-            id: `comment-${Date.now()}`,
+            id: crypto.randomUUID(),
             userId: currentUser.id,
             phaseId, text, createdAt: new Date()
         };
@@ -142,7 +142,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
     };
 
     const addTask = (projectId: string, task: Omit<Task, 'id' | 'createdAt'>) => {
-         const newTask: Task = { ...task, id: `task-${Date.now()}`, createdAt: new Date() };
+         const newTask: Task = { ...task, id: crypto.randomUUID(), createdAt: new Date() };
          const updateFn = (p: Project) => {
             if (p.id === projectId) {
                 const updatedTasks = [...(p.tasks || []), newTask];
@@ -183,7 +183,7 @@ export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderPr
             return false; // User already exists
         }
         const newUser: User = { 
-            id: `user-${Date.now()}`, 
+            id: crypto.randomUUID(), 
             name, 
             email, 
             role: 'Engineer', 
