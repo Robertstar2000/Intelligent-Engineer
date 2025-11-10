@@ -231,6 +231,7 @@ interface DocumentsPageProps {
 export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, initialDocToOpenId, onClearInitialDoc }) => {
     const { project, updateProject } = useProject();
     const [isLoading, setIsLoading] = useState<string | null>(null);
+    const [isZipping, setIsZipping] = useState(false);
     const [editingDocument, setEditingDocument] = useState<{ id: string; name: string; content: string; type: string; } | null>(null);
 
     const allDocuments = React.useMemo(() => {
@@ -308,81 +309,6 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
     const hasSimulationVibePrompt = project.metaDocuments?.some(doc => doc.type === 'simulation-vibe-prompt');
     const hasExecutiveSummary = project.metaDocuments?.some(doc => doc.type === 'executive-summary');
     
-    const handleDownloadAll = async () => {
-        if (!project) return;
-        setIsLoading('zip');
-        try {
-            const zip = new JSZip();
-            const projectFolder = zip.folder(sanitizeFilename(project.name));
-
-            const summaryContent = `# Project Summary: ${project.name}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n## Disciplines\n${project.disciplines.join(', ')}`;
-            projectFolder.file('00_Project_Summary.md', summaryContent);
-            
-            project.phases.forEach((phase, index) => {
-                if (phase.outputs.length > 0 || (phase.sprints && phase.sprints.some(s => s.outputs.length > 0)) || phase.chatLog) {
-                    const phaseIndex = String(index + 1).padStart(2, '0');
-                    const phaseName = sanitizeFilename(phase.name);
-                    const phaseFolder = projectFolder.folder(`${phaseIndex}_${phaseName}`);
-                    
-                    if (phase.outputs.length > 0) {
-                        phaseFolder.file('main_document.md', phase.outputs[phase.outputs.length - 1].content);
-                    }
-
-                    if (phase.chatLog && phase.chatLog.length > 0) {
-                        phaseFolder.file('chat_log.md', formatChatLog(phase.chatLog));
-                    }
-                    
-                    phase.sprints.forEach((sprint, sprintIndex) => {
-                        const sprintName = sanitizeFilename(sprint.name);
-                        const sprintFolder = phaseFolder.folder(`${sprintIndex + 1}_${sprintName}`);
-                        if (sprint.outputs.length > 0) {
-                            sprintFolder.file('sprint_document.md', sprint.outputs[sprint.outputs.length - 1].content);
-                        }
-                        if (sprint.chatLog && sprint.chatLog.length > 0) {
-                            sprintFolder.file('chat_log.md', formatChatLog(sprint.chatLog));
-                        }
-                    });
-                }
-            });
-            
-            for (const doc of (project.metaDocuments || [])) {
-                if (doc.type === '3d-image-veo') {
-                    const response = await fetch(`${doc.content}&key=${process.env.API_KEY}`);
-                    const blob = await response.blob();
-                    projectFolder.file(sanitizeFilename(doc.name) + '.mp4', blob);
-                } else if (['diagram', 'wireframe', 'schematic', '2d-image'].includes(doc.type)) {
-                    const base64Data = doc.content.split(',')[1];
-                    projectFolder.file(sanitizeFilename(doc.name) + '.png', base64Data, { base64: true });
-                } else {
-                     const extMap = {
-                        'pwb-layout-svg': 'svg',
-                        'chemical-formula': 'svg',
-                        '3d-printing-file': 'stl',
-                        'software-code': 'js',
-                        'recommendations-log': 'md',
-                        'team-roles-suggestion': 'md',
-                    };
-                    const extension = extMap[doc.type] || 'md';
-                    projectFolder.file(sanitizeFilename(doc.name) + `.${extension}`, doc.content);
-                }
-            }
-
-            const zipContent = await zip.generateAsync({ type: 'blob' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(zipContent);
-            a.download = `${sanitizeFilename(project.name)}_project_archive.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setToast({ message: 'Project archive downloaded successfully.', type: 'success' });
-        } catch (error) {
-            console.error(error);
-            setToast({ message: 'Failed to create project archive.', type: 'error' });
-        } finally {
-            setIsLoading(null);
-        }
-    };
-    
     const handleVibePrompt = async (type: 'code' | 'simulation') => {
         if (!process.env.API_KEY) {
             setToast({ message: 'API key is not configured.', type: 'error' });
@@ -437,6 +363,88 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
             setIsLoading(null);
         }
     };
+
+    const handleDownloadAll = async () => {
+        if (!project) {
+            setToast({ message: "No active project to download.", type: 'error' });
+            return;
+        }
+
+        setIsZipping(true);
+        setToast({ message: "Generating project documents archive...", type: 'info' });
+
+        try {
+            const zip = new JSZip();
+            const projectFolder = zip.folder(sanitizeFilename(project.name));
+
+            const summaryContent = `# Project Summary: ${project.name}\n\n## Requirements\n${project.requirements}\n\n## Constraints\n${project.constraints}\n\n## Disciplines\n${project.disciplines.join(', ')}`;
+            projectFolder.file('00_Project_Summary.md', summaryContent);
+            
+            project.phases.forEach((phase, index) => {
+                if (phase.outputs.length > 0 || (phase.sprints && phase.sprints.some(s => s.outputs.length > 0)) || phase.chatLog) {
+                    const phaseIndex = String(index + 1).padStart(2, '0');
+                    const phaseName = sanitizeFilename(phase.name);
+                    const phaseFolder = projectFolder.folder(`${phaseIndex}_${phaseName}`);
+                    
+                    if (phase.outputs.length > 0) {
+                        phaseFolder.file('main_document.md', phase.outputs[phase.outputs.length - 1].content);
+                    }
+    
+                    if (phase.chatLog && phase.chatLog.length > 0) {
+                        phaseFolder.file('chat_log.md', formatChatLog(phase.chatLog));
+                    }
+                    
+                    phase.sprints.forEach((sprint, sprintIndex) => {
+                        const sprintName = sanitizeFilename(sprint.name);
+                        const sprintFolder = phaseFolder.folder(`${sprintIndex + 1}_${sprintName}`);
+                        if (sprint.outputs.length > 0) {
+                            sprintFolder.file('sprint_document.md', sprint.outputs[sprint.outputs.length - 1].content);
+                        }
+                        if (sprint.chatLog && sprint.chatLog.length > 0) {
+                            sprintFolder.file('chat_log.md', formatChatLog(sprint.chatLog));
+                        }
+                    });
+                }
+            });
+            
+            for (const doc of (project.metaDocuments || [])) {
+                if (doc.type === '3d-image-veo') {
+                    const response = await fetch(`${doc.content}&key=${process.env.API_KEY}`);
+                    const blob = await response.blob();
+                    projectFolder.file(sanitizeFilename(doc.name) + '.mp4', blob);
+                } else if (['diagram', 'wireframe', 'schematic', '2d-image'].includes(doc.type)) {
+                    const base64Data = doc.content.split(',')[1];
+                    projectFolder.file(sanitizeFilename(doc.name) + '.png', base64Data, { base64: true });
+                } else {
+                     const extMap: { [key: string]: string } = {
+                        'pwb-layout-svg': 'svg',
+                        'chemical-formula': 'svg',
+                        '3d-printing-file': 'stl',
+                        'software-code': 'js',
+                        'recommendations-log': 'md',
+                        'team-roles-suggestion': 'md',
+                    };
+                    const extension = extMap[doc.type] || 'md';
+                    projectFolder.file(sanitizeFilename(doc.name) + `.${extension}`, doc.content);
+                }
+            }
+    
+            const zipContent = await zip.generateAsync({ type: 'blob' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(zipContent);
+            a.download = `${sanitizeFilename(project.name)}_documents.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setToast({ message: 'Documents archive downloaded.', type: 'success' });
+        } catch (error: any) {
+            console.error(error);
+            setToast({ message: `Failed to create documents archive: ${error.message}`, type: 'error' });
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
 
     const handleUpdateDocumentContent = (docId: string, newContent: string) => {
         if (!project) return;
@@ -523,11 +531,6 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
             
              <Card title="Project Exports & Handoffs" description="Generate comprehensive project artifacts for other tools and team members." className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                     <Button onClick={handleDownloadAll} disabled={isLoading === 'zip'} className="flex-col h-auto py-4">
-                        {isLoading === 'zip' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <Package className="w-6 h-6 mb-2" />}
-                        <span className="font-semibold">Download All as .zip</span>
-                        <span className="text-xs font-normal mt-1">A complete, structured archive of all documents.</span>
-                    </Button>
                     <Button onClick={() => handleVibePrompt('code')} disabled={!!isLoading} variant="outline" className={`flex-col h-auto py-4 ${hasCodeVibePrompt ? 'border-brand-primary bg-brand-primary/10' : ''}`}>
                         {isLoading === 'code' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <BrainCircuit className="w-6 h-6 mb-2" />}
                         <span className="font-semibold">Generate Code Vibe Prompt</span>
@@ -542,6 +545,11 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
                         {isLoading === 'summary' ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin" /> : <FileSignature className="w-6 h-6 mb-2" />}
                         <span className="font-semibold">Generate Executive Summary</span>
                         <span className="text-xs font-normal mt-1">Let AI synthesize a high-level project summary.</span>
+                    </Button>
+                     <Button onClick={handleDownloadAll} disabled={isZipping} variant="outline" className="flex-col h-auto py-4">
+                        {isZipping ? <LoaderCircle className="w-6 h-6 mb-2 animate-spin"/> : <Package className="w-6 h-6 mb-2" />}
+                        <span className="font-semibold">Download All Docs</span>
+                        <span className="text-xs font-normal mt-1">A .zip of all generated documents and assets.</span>
                     </Button>
                 </div>
             </Card>

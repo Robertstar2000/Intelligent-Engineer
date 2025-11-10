@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useProject } from './context/ProjectContext';
-import { Project, Phase, Comment, Task, ToastMessage, SearchResult } from './types';
+import { Project, Phase, Comment, Task, ToastMessage, SearchResult, Message } from './types';
 
 import { LandingPage } from './pages/LandingPage';
 import { ProjectSelectionView } from './pages/ProjectSelectionView';
@@ -19,12 +19,37 @@ import { HelpModal } from './components/HelpModal';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { NLPQueryInterface } from './components/NLPQueryInterface';
 import { Button } from './components/ui';
-import { Users, MessageSquare, HelpCircle } from 'lucide-react';
+import { Users, MessageSquare, HelpCircle, Save } from 'lucide-react';
 import { Toast } from './components/Toast';
 import { AuthModal } from './components/AuthModal';
 import { ProjectHeader } from './components/ProjectHeader';
 
 type AutomationStatus = 'idle' | 'running' | 'paused' | 'error' | 'complete';
+
+declare var JSZip: any;
+
+const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9_.]/gi, '_').toLowerCase();
+
+const formatChatLog = (log: Message[]): string => {
+    return log.map(msg => {
+        let header = '';
+        if (msg.sender === 'system') {
+            header = `> **SYSTEM** (${msg.timestamp})`;
+        } else {
+            header = `**${msg.userName || 'Unknown'}** (${msg.timestamp})`;
+        }
+
+        let content = '';
+        if (msg.text) {
+            content = msg.text;
+        } else if (msg.attachment) {
+            content = `*Attachment: ${msg.attachment.name}*`;
+        }
+
+        return `${header}\n> ${content.replace(/\n/g, '\n> ')}\n`;
+    }).join('\n---\n');
+};
+
 
 export const App = () => {
     const { 
@@ -79,6 +104,87 @@ export const App = () => {
             return () => clearTimeout(timer);
         }
     }, [toast]);
+
+    const handleSaveProject = async () => {
+        if (!currentProject) {
+            setToast({ message: "No active project to save.", type: 'error' });
+            return;
+        }
+    
+        setToast({ message: "Generating project archive...", type: 'info' });
+    
+        try {
+            const zip = new JSZip();
+            const projectFolder = zip.folder(sanitizeFilename(currentProject.name));
+    
+            // Add the full project state for backup and restoration purposes
+            projectFolder.file('project_state.json', JSON.stringify(currentProject, null, 2));
+    
+            const summaryContent = `# Project Summary: ${currentProject.name}\n\n## Requirements\n${currentProject.requirements}\n\n## Constraints\n${currentProject.constraints}\n\n## Disciplines\n${currentProject.disciplines.join(', ')}`;
+            projectFolder.file('00_Project_Summary.md', summaryContent);
+            
+            currentProject.phases.forEach((phase, index) => {
+                if (phase.outputs.length > 0 || (phase.sprints && phase.sprints.some(s => s.outputs.length > 0)) || phase.chatLog) {
+                    const phaseIndex = String(index + 1).padStart(2, '0');
+                    const phaseName = sanitizeFilename(phase.name);
+                    const phaseFolder = projectFolder.folder(`${phaseIndex}_${phaseName}`);
+                    
+                    if (phase.outputs.length > 0) {
+                        phaseFolder.file('main_document.md', phase.outputs[phase.outputs.length - 1].content);
+                    }
+    
+                    if (phase.chatLog && phase.chatLog.length > 0) {
+                        phaseFolder.file('chat_log.md', formatChatLog(phase.chatLog));
+                    }
+                    
+                    phase.sprints.forEach((sprint, sprintIndex) => {
+                        const sprintName = sanitizeFilename(sprint.name);
+                        const sprintFolder = phaseFolder.folder(`${sprintIndex + 1}_${sprintName}`);
+                        if (sprint.outputs.length > 0) {
+                            sprintFolder.file('sprint_document.md', sprint.outputs[sprint.outputs.length - 1].content);
+                        }
+                        if (sprint.chatLog && sprint.chatLog.length > 0) {
+                            sprintFolder.file('chat_log.md', formatChatLog(sprint.chatLog));
+                        }
+                    });
+                }
+            });
+            
+            for (const doc of (currentProject.metaDocuments || [])) {
+                if (doc.type === '3d-image-veo') {
+                    const response = await fetch(`${doc.content}&key=${process.env.API_KEY}`);
+                    const blob = await response.blob();
+                    projectFolder.file(sanitizeFilename(doc.name) + '.mp4', blob);
+                } else if (['diagram', 'wireframe', 'schematic', '2d-image'].includes(doc.type)) {
+                    const base64Data = doc.content.split(',')[1];
+                    projectFolder.file(sanitizeFilename(doc.name) + '.png', base64Data, { base64: true });
+                } else {
+                     const extMap = {
+                        'pwb-layout-svg': 'svg',
+                        'chemical-formula': 'svg',
+                        '3d-printing-file': 'stl',
+                        'software-code': 'js',
+                        'recommendations-log': 'md',
+                        'team-roles-suggestion': 'md',
+                    };
+                    const extension = extMap[doc.type] || 'md';
+                    projectFolder.file(sanitizeFilename(doc.name) + `.${extension}`, doc.content);
+                }
+            }
+    
+            const zipContent = await zip.generateAsync({ type: 'blob' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(zipContent);
+            a.download = `${sanitizeFilename(currentProject.name)}_project_archive.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setToast({ message: 'Project archive saved successfully.', type: 'success' });
+        } catch (error) {
+            console.error(error);
+            setToast({ message: 'Failed to create project archive.', type: 'error' });
+        }
+    };
 
     const handleSelectProject = (project: Project) => {
         setCurrentProject(project);
@@ -251,14 +357,14 @@ export const App = () => {
         }
 
         if (currentView === 'projectSelection') {
-            return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} />;
+            return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
         }
         if (currentView === 'wizard') {
             return <ProjectWizard onProjectCreated={(p) => { setCurrentProject(p); setCurrentView('dashboard'); }} onCancel={() => setCurrentView('projectSelection')} />;
         }
 
         if (!currentProject) {
-             return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} />;
+             return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
         }
 
         const projectHeaderProps = {
@@ -321,7 +427,7 @@ export const App = () => {
             case 'integrations':
                 return <IntegrationsPage onBack={() => setCurrentView('dashboard')} />;
             default:
-                 return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} />;
+                 return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
         }
     };
 
@@ -341,13 +447,18 @@ export const App = () => {
                 {isCollaborationPanelOpen && <CollaborationPanel isOpen={isCollaborationPanelOpen} onClose={() => setIsCollaborationPanelOpen(false)} />}
                 <NLPQueryInterface isOpen={isNlpQueryOpen} onClose={() => setIsNlpQueryOpen(false)} />
                 <div className="fixed bottom-4 right-4 flex flex-col space-y-2 z-50">
-                    <Button variant="secondary" onClick={() => setIsCollaborationPanelOpen(true)} className="rounded-full !p-3 shadow-lg">
+                    {currentProject && (
+                        <Button variant="primary" onClick={handleSaveProject} className="rounded-full !p-3 shadow-lg" aria-label="Save Project">
+                            <Save className="w-6 h-6"/>
+                        </Button>
+                    )}
+                    <Button variant="secondary" onClick={() => setIsCollaborationPanelOpen(true)} className="rounded-full !p-3 shadow-lg" aria-label="Open Collaboration Panel">
                         <Users className="w-6 h-6"/>
                     </Button>
-                    <Button variant="secondary" onClick={() => setIsNlpQueryOpen(true)} className="rounded-full !p-3 shadow-lg">
+                    <Button variant="secondary" onClick={() => setIsNlpQueryOpen(true)} className="rounded-full !p-3 shadow-lg" aria-label="Open Project Q&A">
                         <MessageSquare className="w-6 h-6"/>
                     </Button>
-                    <Button variant="secondary" onClick={() => setIsHelpModalOpen(true)} className="rounded-full !p-3 shadow-lg">
+                    <Button variant="secondary" onClick={() => setIsHelpModalOpen(true)} className="rounded-full !p-3 shadow-lg" aria-label="Open Help">
                         <HelpCircle className="w-6 h-6"/>
                     </Button>
                 </div>
