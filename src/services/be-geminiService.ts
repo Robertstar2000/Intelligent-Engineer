@@ -164,6 +164,54 @@ const getSystemInstruction = (baseInstruction: string, devMode: 'full' | 'rapid'
 };
 
 
+// fix: Add missing function generateInitialProjectDocs
+export const generateInitialProjectDocs = async (
+    projectData: { name: string, description: string, disciplines: string[], requirements: string, constraints: string, customConcept: string },
+    docType: 'requirements' | 'constraints',
+    tuningSettings?: TuningSettings
+): Promise<string> => {
+    const ai = getAi();
+    const model = selectModel({ taskType: 'projectSetup' });
+
+    let systemInstruction: string;
+    let userPrompt: string;
+
+    const baseContext = `
+        Project Name: ${projectData.name}
+        Project Description: ${projectData.description}
+        Engineering Disciplines: ${projectData.disciplines.join(', ')}
+        ${projectData.customConcept ? `Custom Guiding Concept: ${projectData.customConcept}` : ''}
+    `.trim();
+
+    if (docType === 'requirements') {
+        systemInstruction = `You are an expert AI engineering assistant specializing in requirements gathering. Your task is to generate a detailed, professional technical requirements document in Markdown.`;
+        userPrompt = `
+            ${baseContext}
+            ${projectData.constraints ? `\n\nKnown Constraints:\n${projectData.constraints}` : ''}
+            \n\nTuning Parameters: ${JSON.stringify(tuningSettings)}
+            
+            \n\nTask: Based on the provided project details, generate a comprehensive list of functional and non-functional requirements. Be specific, measurable, achievable, relevant, and time-bound (SMART) where possible.
+        `.trim();
+    } else { // constraints
+        systemInstruction = `You are an expert AI engineering assistant specializing in identifying project constraints. Your task is to generate a detailed list of potential project constraints in Markdown.`;
+        userPrompt = `
+            ${baseContext}
+            ${projectData.requirements ? `\n\nKnown Requirements:\n${projectData.requirements}` : ''}
+
+            \n\nTask: Based on the provided project details, identify and list potential constraints. Consider areas like budget, timeline, regulatory standards, available technology, manufacturing capabilities, and resource limitations.
+        `.trim();
+    }
+
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: { systemInstruction }
+    }));
+
+    return response.text;
+};
+
+
 // --- SERVICE FUNCTIONS ---
 
 export const generateStandardPhaseOutput = async (project: Project, phase: Phase, tuningSettings: TuningSettings): Promise<string> => {
@@ -786,7 +834,7 @@ export const generateAdvancedAsset = async (
         let operation: any = await withRetry(() => ai.models.generateVideos({ model: 'veo-3.1-fast-generate-preview', prompt: detailedPrompt, config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' } }));
         while (!operation.done) {
             await new Promise(resolve => setTimeout(resolve, 10000));
-            operation = await ai.operations.getVideosOperation({ operation: operation });
+            operation = await ai.operations.getVideosOperation({operation: operation});
         }
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) throw new Error("VEO generation failed to produce a video URI.");

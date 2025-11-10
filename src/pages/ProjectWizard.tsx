@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { CheckCircle, Plus, Search, LoaderCircle, Shield } from 'lucide-react';
+import { CheckCircle, Plus, Search, LoaderCircle, Shield, Sparkles } from 'lucide-react';
 import { Button, Card, ProgressBar } from '../components/ui';
 import { TuningControls } from '../components/TuningControls';
 import { useProject } from '../context/ProjectContext';
 import { Project, Phase } from '../types';
 import { PROJECT_TEMPLATES, ENGINEERING_DISCIPLINES, COMPLIANCE_STANDARDS } from '../constants';
-import { generateTailoredPhaseDescriptions } from '../services/geminiService';
+import { generateTailoredPhaseDescriptions, generateInitialProjectDocs } from '../services/geminiService';
 
 interface ProjectWizardProps {
   onProjectCreated: (project: Project) => void;
@@ -19,6 +19,7 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   const [developmentMode, setDevelopmentMode] = useState<'full' | 'rapid'>('full');
   const [hasInteracted, setHasInteracted] = useState({ requirements: false, constraints: false });
   const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [isGenerating, setIsGenerating] = useState<'requirements' | 'constraints' | null>(null);
   const [requirementsTuning, setRequirementsTuning] = useState({
       clarity: 70,
       technicality: 60,
@@ -33,6 +34,24 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   
   const filteredStandards = COMPLIANCE_STANDARDS.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleStandardToggle = (standard: string) => setProjectData(prev => ({ ...prev, complianceStandards: prev.complianceStandards.includes(standard) ? prev.complianceStandards.filter(s => s !== standard) : [...prev.complianceStandards, standard] }));
+
+  const handleGenerateDoc = async (docType: 'requirements' | 'constraints') => {
+        setIsGenerating(docType);
+        try {
+            const result = await generateInitialProjectDocs(
+                projectData,
+                docType,
+                docType === 'requirements' ? requirementsTuning : undefined
+            );
+            setProjectData(p => ({ ...p, [docType]: result }));
+            setHasInteracted(p => ({ ...p, [docType]: true }));
+        } catch (err) {
+            console.error(`Failed to generate ${docType}:`, err);
+            // Optionally set a toast message here
+        } finally {
+            setIsGenerating(null);
+        }
+    };
 
   const createProject = async () => {
     if (!currentUser) return;
@@ -116,7 +135,7 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
   const progress = (step / 7) * 100;
-  const titles = ['Select Template', 'Project Definition', 'Requirements', 'Constraints', 'Disciplines', 'Compliance', 'Finalizing Project...'];
+  const titles = ['Select Template', 'Project Definition', 'Disciplines', 'Compliance', 'Requirements', 'Constraints', 'Finalizing Project...'];
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
@@ -197,38 +216,6 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
           )}
           {step === 3 && (
             <div>
-              <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Requirements</label>
-              <textarea id="requirements" rows={5} value={projectData.requirements} 
-                onFocus={() => setHasInteracted(p => ({ ...p, requirements: true }))}
-                onChange={e => {
-                    setProjectData(p => ({ ...p, requirements: e.target.value }));
-                    setHasInteracted(p => ({ ...p, requirements: true }));
-                }} 
-                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.requirements ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="Define the core objectives, functionalities, and performance criteria." />
-              <div className="mt-6">
-                <TuningControls
-                  settings={requirementsTuning}
-                  onChangeSettings={setRequirementsTuning}
-                  title="Tune Initial Requirements Generation"
-                  description="Select a profile or adjust parameters for the initial AI-generated requirements documents."
-                />
-              </div>
-            </div>
-          )}
-          {step === 4 && (
-            <div>
-              <label htmlFor="constraints" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Constraints</label>
-              <textarea id="constraints" rows={5} value={projectData.constraints} 
-                onFocus={() => setHasInteracted(p => ({ ...p, constraints: true }))}
-                onChange={e => {
-                  setProjectData(p => ({ ...p, constraints: e.target.value }));
-                  setHasInteracted(p => ({ ...p, constraints: true }));
-                }}
-                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.constraints ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="List any limitations, such as budget, timeline, regulations, or available technologies." />
-            </div>
-          )}
-          {step === 5 && (
-            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Engineering Disciplines (up to 3)</label>
               <div className="mt-2 flex items-center border border-gray-300 rounded-md px-3 dark:border-gray-600">
                 <Search className="w-5 h-5 text-gray-400" />
@@ -244,7 +231,7 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
               </div>
             </div>
           )}
-          {step === 6 && (
+          {step === 4 && (
              <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Compliance Standards (Optional)</label>
                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Select any regulatory standards that apply to this project. This will guide the AI in generating compliant documentation.</p>
@@ -262,6 +249,50 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
               </div>
             </div>
           )}
+          {step === 5 && (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Requirements</label>
+                <Button variant="outline" size="sm" onClick={() => handleGenerateDoc('requirements')} disabled={isGenerating !== null}>
+                    {isGenerating === 'requirements' ? <LoaderCircle className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                    Generate with AI
+                </Button>
+              </div>
+              <textarea id="requirements" rows={5} value={projectData.requirements} 
+                onFocus={() => setHasInteracted(p => ({ ...p, requirements: true }))}
+                onChange={e => {
+                    setProjectData(p => ({ ...p, requirements: e.target.value }));
+                    setHasInteracted(p => ({ ...p, requirements: true }));
+                }} 
+                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.requirements ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="Click 'Generate with AI' or manually define the core objectives, functionalities, and performance criteria." />
+              <div className="mt-6">
+                <TuningControls
+                  settings={requirementsTuning}
+                  onChangeSettings={setRequirementsTuning}
+                  title="Tune Requirements Generation"
+                  description="Adjust parameters to guide the AI for requirements generation."
+                />
+              </div>
+            </div>
+          )}
+          {step === 6 && (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label htmlFor="constraints" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Constraints</label>
+                 <Button variant="outline" size="sm" onClick={() => handleGenerateDoc('constraints')} disabled={isGenerating !== null}>
+                    {isGenerating === 'constraints' ? <LoaderCircle className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                    Generate with AI
+                </Button>
+            </div>
+              <textarea id="constraints" rows={8} value={projectData.constraints} 
+                onFocus={() => setHasInteracted(p => ({ ...p, constraints: true }))}
+                onChange={e => {
+                  setProjectData(p => ({ ...p, constraints: e.target.value }));
+                  setHasInteracted(p => ({ ...p, constraints: true }));
+                }}
+                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm dark:bg-charcoal-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white ${!hasInteracted.constraints ? 'text-gray-400 dark:text-gray-500' : ''}`} placeholder="Click 'Generate with AI' or manually list any limitations, such as budget, timeline, regulations, or available technologies." />
+            </div>
+          )}
           {step === 7 && (
               <div className="text-center py-12">
                   <LoaderCircle className="w-12 h-12 mx-auto text-brand-primary animate-spin" />
@@ -276,8 +307,10 @@ export const ProjectWizard = ({ onProjectCreated, onCancel }: ProjectWizardProps
                 onClick={step === 6 ? createProject : nextStep} 
                 disabled={
                     (step === 1 && (!selectedTemplateName || (selectedTemplateName === 'Custom Template' && !projectData.customConcept.trim()))) ||
-                    (step === 2 && !projectData.name) || 
-                    (step === 5 && projectData.disciplines.length === 0)
+                    (step === 2 && !projectData.name.trim()) || 
+                    (step === 3 && projectData.disciplines.length === 0) ||
+                    (step === 5 && !projectData.requirements.trim()) ||
+                    (step === 6 && !projectData.constraints.trim())
                 }
               >
                 {step === 6 ? 'Create Project' : 'Next'}
