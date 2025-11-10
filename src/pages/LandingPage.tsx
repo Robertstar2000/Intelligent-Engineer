@@ -5,7 +5,7 @@ import { Features } from '../components/Features';
 import { UnifiedLifecycle } from '../components/UnifiedLifecycle';
 import { Footer } from '../components/Footer';
 
-export const LandingPage = ({ onLoginClick }) => {
+export const LandingPage = ({ onLoginClick }: { onLoginClick: () => void }) => {
     return (
         <div className="dark:bg-charcoal-900 text-white">
             <Header onLoginClick={onLoginClick} />

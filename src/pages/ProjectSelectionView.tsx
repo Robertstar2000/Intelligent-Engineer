@@ -7,7 +7,7 @@ import { Project, ToastMessage } from '../types';
 
 declare var JSZip: any;
 
-export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setTheme, setToast }: { onSelectProject: (project: Project) => void, onCreateNew: () => void, theme: string, setTheme: (theme: string) => void, setToast: (toast: ToastMessage | null) => void }) => {
+export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setTheme, setToast }: { onSelectProject: (project: Project) => void, onCreateNew: () => void, theme: string, setTheme: (theme: string) => void, setToast: (toast: ToastMessage) => void }) => {
     const { currentUser, projects, logout, deleteProject, addProject } = useProject();
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);

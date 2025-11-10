@@ -30,14 +30,31 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 interface ProjectProviderProps {
     children?: ReactNode;
-    theme: string;
-    setTheme: (theme: string) => void;
 }
 
-export const ProjectProvider = ({ children, theme, setTheme }: ProjectProviderProps) => {
+export const ProjectProvider = ({ children }: ProjectProviderProps) => {
     const [project, setProject] = useState<Project | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [theme, setThemeState] = useState(() => {
+        if (typeof window === 'undefined') return 'dark';
+        return localStorage.getItem('theme') || 'dark';
+    });
+
+    const setTheme = (newTheme: string) => {
+        if (newTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', newTheme);
+        setThemeState(newTheme);
+    };
+
+    useEffect(() => {
+        setTheme(theme);
+    }, []);
+
 
     // Load current user from session storage on initial load
     useEffect(() => {

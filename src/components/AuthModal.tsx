@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { BrainCircuit } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card } from './ui';
+import { ToastMessage } from '../types';
 
-export const AuthModal = ({ isOpen, onClose, setToast }) => {
+export const AuthModal = ({ isOpen, onClose, setToast }: { isOpen: boolean, onClose: () => void, setToast: (toast: ToastMessage) => void }) => {
     const { login, signup } = useProject();
     const [isLoginView, setIsLoginView] = useState(true);
     const [email, setEmail] = useState('');
@@ -13,7 +14,7 @@ export const AuthModal = ({ isOpen, onClose, setToast }) => {
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         let success = false;

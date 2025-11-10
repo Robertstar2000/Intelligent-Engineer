@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useProject } from './context/ProjectContext';
 import { Project, Phase, Comment, Task, ToastMessage, SearchResult, Message } from './types';
@@ -159,7 +160,7 @@ export const App = () => {
                     const base64Data = doc.content.split(',')[1];
                     projectFolder.file(sanitizeFilename(doc.name) + '.png', base64Data, { base64: true });
                 } else {
-                     const extMap = {
+                     const extMap: { [key: string]: string } = {
                         'pwb-layout-svg': 'svg',
                         'chemical-formula': 'svg',
                         '3d-printing-file': 'stl',
@@ -167,7 +168,7 @@ export const App = () => {
                         'recommendations-log': 'md',
                         'team-roles-suggestion': 'md',
                     };
-                    const extension = extMap[doc.type] || 'md';
+                    const extension = extMap[doc.type as keyof typeof extMap] || 'md';
                     projectFolder.file(sanitizeFilename(doc.name) + `.${extension}`, doc.content);
                 }
             }
@@ -180,9 +181,9 @@ export const App = () => {
             a.click();
             document.body.removeChild(a);
             setToast({ message: 'Project archive saved successfully.', type: 'success' });
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            setToast({ message: 'Failed to create project archive.', type: 'error' });
+            setToast({ message: `Failed to create project archive: ${error.message}`, type: 'error' });
         }
     };
 
@@ -427,6 +428,7 @@ export const App = () => {
             case 'integrations':
                 return <IntegrationsPage onBack={() => setCurrentView('dashboard')} />;
             default:
+                 // FIX: Corrected props passed to ProjectSelectionView
                  return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
         }
     };
