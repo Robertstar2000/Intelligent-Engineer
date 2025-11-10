@@ -6,6 +6,13 @@ import { withRetry } from '../utils';
 const PRO_MODEL = 'gemini-2.5-pro';
 const FLASH_MODEL = 'gemini-2.5-flash';
 
+export class UserCancelledError extends Error {
+  constructor(message = 'Automation was cancelled by the user.') {
+    super(message);
+    this.name = 'UserCancelledError';
+  }
+}
+
 export const EXTERNAL_TOOLS: { id: string; name: string; category: 'CAD' | 'Electronics'; requirements: { description: string; extension: string; outputType: string; qaPrompt: string; } }[] = [
     {
         id: 'solidworks', name: 'SolidWorks', category: 'CAD',
@@ -213,6 +220,121 @@ export const generateInitialProjectDocs = async (
 
 
 // --- SERVICE FUNCTIONS ---
+const VISUAL_TOOL_LIST = [
+    { id: 'diagram', description: 'A functional block diagram illustrating system architecture and data flow.' },
+    { id: 'wireframe', description: 'A 3D wireframe model of a physical component.' },
+    { id: 'schematic', description: 'A 2D schematic of an electronic circuit or mechanical assembly.' },
+    { id: 'pwb-layout-svg', description: 'A PWB (Printed Wiring Board) layout as an SVG file.' },
+    { id: '3d-image-veo', description: 'A short, 3D looping video of a component using VEO.' },
+    { id: '2d-image', description: 'A photorealistic 2D image of a product.' },
+    { id: '3d-printing-file', description: 'A 3D printing file in text-based STL format.' },
+    { id: 'software-code', description: 'A software code file in an appropriate language.' },
+    { id: 'chemical-formula', description: 'A chemical process or formula diagram as an SVG file.' }
+];
+
+async function selectAppropriateTool(project: Project, documentName: string, documentContent: string): Promise<string> {
+    const ai = getAi();
+    const model = FLASH_MODEL; // Fast decision making
+    const systemInstruction = `You are an expert AI Orchestrator. Your task is to select the single most appropriate visual tool to complement a given engineering document. Respond ONLY with the tool's ID from the provided list. If no tool is a good fit, respond with "none".`;
+
+    const userPrompt = `
+        Project Context:
+        - Disciplines: ${project.disciplines.join(', ')}
+        - Guiding Concept: ${project.customConcept || project.description}
+
+        Document Name: "${documentName}"
+        Document Content (first 4000 chars):
+        ---
+        ${documentContent.substring(0, 4000)}... 
+        ---
+
+        Available Tools:
+        ${JSON.stringify(VISUAL_TOOL_LIST)}
+
+        Task: Based on the document, which single tool is most appropriate to generate a visual asset? Respond with the tool ID only.
+    `;
+
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: { systemInstruction }
+    }));
+    
+    const toolId = response.text.trim().replace(/["']/g, ''); // Clean up potential quotes
+    const isValidTool = VISUAL_TOOL_LIST.some(t => t.id === toolId);
+    
+    return isValidTool ? toolId : 'none';
+}
+
+async function generateAndSaveAsset(
+    project: Project,
+    contextItem: { id: string, name: string, description: string, outputs: VersionedOutput[] },
+    phaseId: string, // The ID of the parent phase
+    isSprint: boolean, // To distinguish between sprint and phase
+    onUpdate: (updates: { phaseId: string, sprintId?: string, phaseUpdates?: Partial<Phase>, sprintUpdates?: Partial<Sprint>, newMetaDoc?: MetaDocument }) => void,
+    onToast: (message: string, type?: 'success' | 'error' | 'info') => void
+) {
+    if (!contextItem.outputs || contextItem.outputs.length === 0) return;
+    const documentContent = contextItem.outputs[contextItem.outputs.length - 1].content;
+
+    try {
+        onToast(`Choosing best visual tool for "${contextItem.name}"...`);
+        const toolType = await selectAppropriateTool(project, contextItem.name, documentContent);
+
+        if (toolType && toolType !== 'none') {
+            onToast(`Generating ${toolType} asset for "${contextItem.name}"...`);
+
+            let asset: { content: string; docName: string };
+            const standardTools = ['wireframe', 'diagram', 'schematic'];
+            
+            // fix: The `sprintForAssetGen` object is cast to a `Sprint`, but was missing required properties
+            // `status` and `deliverables`, and contained an extraneous `output` property. The downstream
+            // generator functions only use `name`, `description`, and `outputs`, so we add default
+            // values for the missing properties to satisfy the type contract.
+            const sprintForAssetGen: Sprint = {
+                id: contextItem.id,
+                name: contextItem.name,
+                description: contextItem.description,
+                outputs: contextItem.outputs,
+                status: 'completed',
+                deliverables: [],
+            };
+
+            if (standardTools.includes(toolType)) {
+                asset = await generateStandardVisualAsset(project, sprintForAssetGen, toolType as 'wireframe' | 'diagram' | 'schematic');
+            } else {
+                asset = await generateAdvancedAsset(project, sprintForAssetGen, toolType as 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula');
+            }
+
+            const newDoc: MetaDocument = {
+                id: `meta-asset-${contextItem.id}-${Date.now()}`,
+                name: asset.docName,
+                content: asset.content,
+                type: toolType as MetaDocument['type'],
+                createdAt: new Date(),
+            };
+            
+            if (isSprint) {
+                 onUpdate({
+                    phaseId: phaseId,
+                    sprintId: contextItem.id,
+                    sprintUpdates: { generatedDocId: newDoc.id },
+                    newMetaDoc: newDoc
+                });
+            } else { // is a phase
+                onUpdate({
+                    phaseId: phaseId,
+                    phaseUpdates: { diagramUrl: newDoc.content },
+                    newMetaDoc: newDoc
+                });
+            }
+            onToast(`${asset.docName} generated successfully!`, 'success');
+        }
+    } catch (error: any) {
+        console.error(`Failed to generate asset for ${contextItem.name}`, error);
+        onToast(`Could not generate visual asset for "${contextItem.name}": ${error.message}`, 'error');
+    }
+}
 
 export const generateStandardPhaseOutput = async (project: Project, phase: Phase, tuningSettings: TuningSettings): Promise<string> => {
     const ai = getAi();
@@ -555,136 +677,140 @@ export const generatePhaseVisualAssets = async (project: Project, phase: Phase):
 };
 
 
-export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase, onUpdate: (updates: Partial<Phase>) => void, onToast: (message: string, type?: 'success' | 'error' | 'info') => void): Promise<MetaDocument[]> => {
+export const runAutomatedPhaseGeneration = async (
+    project: Project,
+    phase: Phase,
+    onUpdate: (updates: { phaseId: string, sprintId?: string, phaseUpdates?: Partial<Phase>, sprintUpdates?: Partial<Sprint>, newMetaDoc?: MetaDocument }) => void,
+    onToast: (message: string, type?: 'success' | 'error' | 'info') => void,
+    signal: AbortSignal
+): Promise<void> => {
     let finalOutput = '';
     
+    if (signal.aborted) throw new UserCancelledError();
+
     if (['Requirements', 'Preliminary Design', 'Testing'].includes(phase.name)) {
         let updatedSprints = [...phase.sprints];
         for (let i = 0; i < updatedSprints.length; i++) {
-            const doc = updatedSprints[i];
+            if (signal.aborted) throw new UserCancelledError();
+            let doc = updatedSprints[i];
             try {
                 onToast(`Generating document: ${doc.name}...`);
                 const output = await generateSubDocument({ ...project, phases: project.phases.map(p => p.id === phase.id ? { ...p, sprints: updatedSprints } : p) }, phase, doc);
-                // fix: Create a new version for the sprint output
                 const newVersion: VersionedOutput = {
                     version: (doc.outputs.length || 0) + 1,
                     content: output,
                     reason: 'Automated generation',
                     createdAt: new Date()
                 };
-                updatedSprints[i] = { ...doc, outputs: [...doc.outputs, newVersion], status: 'completed' };
-                onUpdate({ sprints: updatedSprints });
+                doc = { ...doc, outputs: [...doc.outputs, newVersion], status: 'completed' };
+                updatedSprints[i] = doc;
+                onUpdate({ phaseId: phase.id, phaseUpdates: { sprints: updatedSprints } });
+
+                if (signal.aborted) throw new UserCancelledError();
+                await generateAndSaveAsset(project, doc, phase.id, true, onUpdate, onToast);
+
                 await new Promise(resolve => setTimeout(resolve, 1500));
             } catch (error) {
+                if (error instanceof UserCancelledError) throw error;
                 onToast(`Failed to generate document: ${doc.name}. Skipping.`, 'error');
                 console.error(`Automation failed on document ${doc.name}`, error);
                 continue;
             }
         }
-        // fix: Get latest content from outputs array for merge
         finalOutput = updatedSprints.map(d => `## ${d.name}\n\n${d.outputs[d.outputs.length - 1]?.content || 'Not generated.'}`).join('\n\n---\n\n');
-        const newPhaseVersion: VersionedOutput = {
-            version: (phase.outputs.length || 0) + 1,
-            content: finalOutput,
-            reason: 'Automated sprint merge',
-            createdAt: new Date()
-        };
-        onUpdate({ sprints: updatedSprints, outputs: [...phase.outputs, newPhaseVersion], status: 'in-progress' });
+        const newPhaseVersion: VersionedOutput = { version: (phase.outputs.length || 0) + 1, content: finalOutput, reason: 'Automated sprint merge', createdAt: new Date() };
+        onUpdate({ phaseId: phase.id, phaseUpdates: { sprints: updatedSprints, outputs: [...phase.outputs, newPhaseVersion], status: 'in-progress' } });
     } else if (phase.name === 'Critical Design') {
+        if (signal.aborted) throw new UserCancelledError();
         onToast('Generating initial design spec & sprints...');
         const { preliminarySpec, sprints: newSprints } = await generateCriticalDesignSprints(project, phase);
-        // fix: Create first version for the phase output
         const newVersion: VersionedOutput = { version: 1, content: preliminarySpec, reason: 'Initial critical design spec', createdAt: new Date() };
-        onUpdate({ outputs: [newVersion], sprints: newSprints });
+        onUpdate({ phaseId: phase.id, phaseUpdates: { outputs: [newVersion], sprints: newSprints } });
 
         let currentSprints = [...newSprints];
         let currentOutput = preliminarySpec;
         const completedSprintIds = new Set<string>();
 
         while (completedSprintIds.size < currentSprints.length) {
+            if (signal.aborted) throw new UserCancelledError();
             const processableSprints = currentSprints.filter(s => 
                 s.status !== 'completed' &&
                 (s.dependencies ?? []).every(depId => completedSprintIds.has(depId))
             );
 
             if (processableSprints.length === 0) {
-                // This could be due to a circular dependency or a failed sprint that others depend on.
                 const remainingSprints = currentSprints.filter(s => s.status !== 'completed').map(s => s.name).join(', ');
                 onToast(`Automation stalled. Cannot process remaining sprints: ${remainingSprints}. Check for failed dependencies.`, 'error');
-                break; // Exit the loop
+                break;
             }
 
             for (const sprint of processableSprints) {
+                if (signal.aborted) throw new UserCancelledError();
                 try {
                     onToast(`Generating sprint: ${sprint.name}...`);
                     
-                    const phaseForSnapshot: Phase = {
-                        ...phase,
-                        outputs: [{ version: 0, content: currentOutput, reason: 'snapshot', createdAt: new Date() }],
-                        sprints: currentSprints
-                    };
-                    const projectSnapshot = {
-                        ...project,
-                        phases: project.phases.map(p => p.id === phase.id ? phaseForSnapshot : p)
-                    };
+                    const phaseForSnapshot: Phase = { ...phase, outputs: [{ version: 0, content: currentOutput, reason: 'snapshot', createdAt: new Date() }], sprints: currentSprints };
+                    const projectSnapshot = { ...project, phases: project.phases.map(p => p.id === phase.id ? phaseForSnapshot : p) };
                     
                     const { technicalSpec, deliverables } = await generateSprintSpecification(projectSnapshot, phaseForSnapshot, sprint);
                     
                     const newSprintVersion: VersionedOutput = { version: 1, content: technicalSpec, reason: 'Automated generation', createdAt: new Date() };
-                    const updatedSprint: Sprint = { ...sprint, outputs: [newSprintVersion], deliverables, status: 'completed' };
+                    let updatedSprint: Sprint = { ...sprint, outputs: [newSprintVersion], deliverables, status: 'completed' };
                     currentOutput = `${currentOutput || ''}\n\n---\n\n### Completed Sprint: ${sprint.name}\n\n${technicalSpec}`;
-                    currentSprints = currentSprints.map(s => s.id === sprint.id ? updatedSprint : s);
                     
-                    const newPhaseVersion: VersionedOutput = {
-                        version: (phase.outputs.length || 0) + 1,
-                        content: currentOutput,
-                        reason: `Automated merge of sprint ${sprint.name}`,
-                        createdAt: new Date(),
-                    };
-                    onUpdate({ outputs: [...phase.outputs, newPhaseVersion], sprints: currentSprints });
+                    const sprintIndex = currentSprints.findIndex(s => s.id === sprint.id);
+                    currentSprints[sprintIndex] = updatedSprint;
+                    
+                    const newPhaseVersion: VersionedOutput = { version: (phase.outputs.length || 0) + 2, content: currentOutput, reason: `Automated merge of sprint ${sprint.name}`, createdAt: new Date() };
+                    onUpdate({ phaseId: phase.id, phaseUpdates: { outputs: [...(phase.outputs || []), newPhaseVersion], sprints: currentSprints } });
                     completedSprintIds.add(sprint.id);
+
+                    if (signal.aborted) throw new UserCancelledError();
+                    await generateAndSaveAsset(project, updatedSprint, phase.id, true, onUpdate, onToast);
+
                 } catch (error) {
+                    if (error instanceof UserCancelledError) throw error;
                     onToast(`Failed to generate sprint: ${sprint.name}. Skipping.`, 'error');
                     console.error(`Automation failed on sprint ${sprint.name}`, error);
-                    // Do not add to completedSprintIds, so dependency checks will correctly fail for other sprints.
-                    // We just continue to the next processable sprint.
                     continue;
                 }
             }
         }
         finalOutput = currentOutput;
-        onUpdate({ status: 'in-progress' });
-
+        onUpdate({ phaseId: phase.id, phaseUpdates: { status: 'in-progress' } });
     } else { // Standard Phase
         try {
+            if (signal.aborted) throw new UserCancelledError();
             onToast(`Generating documentation for ${phase.name}...`);
             const output = await generateStandardPhaseOutput(project, phase, phase.tuningSettings);
             finalOutput = output;
-            // fix: Create a new version for the phase output
             const newVersion: VersionedOutput = { version: (phase.outputs.length || 0) + 1, content: output, reason: 'Automated generation', createdAt: new Date() };
-            onUpdate({ outputs: [...phase.outputs, newVersion], status: 'in-progress' });
+            const updatedOutputs = [...(phase.outputs || []), newVersion];
+            onUpdate({ phaseId: phase.id, phaseUpdates: { outputs: updatedOutputs, status: 'in-progress' } });
+            
+            if (signal.aborted) throw new UserCancelledError();
+            const phaseForAssetGen = { ...phase, outputs: updatedOutputs };
+            await generateAndSaveAsset(project, phaseForAssetGen, phase.id, false, onUpdate, onToast);
+
         } catch (error: any) {
+            if (error instanceof UserCancelledError) throw error;
             onToast(`Failed to generate documentation for ${phase.name}.`, 'error');
             console.error(`Automation error on phase ${phase.name}`, error);
-            throw error; // Propagate to stop the whole process as this is a blocking failure.
+            throw error;
         }
     }
 
-    // fix: Create a final version for the phase output
-    const finalVersion: VersionedOutput = {
-        version: (phase.outputs.length || 0) + 1,
-        content: finalOutput,
-        reason: 'Automated phase completion',
-        createdAt: new Date()
-    };
-    let finalPhaseState: Partial<Phase> = { outputs: [...phase.outputs, finalVersion] };
+    if (signal.aborted) throw new UserCancelledError();
+    const finalVersion: VersionedOutput = { version: (phase.outputs.length || 0) + 2, content: finalOutput, reason: 'Automated phase completion', createdAt: new Date() };
+    let finalPhaseState: Partial<Phase> = { outputs: [...(phase.outputs || []), finalVersion] };
 
     if (phase.designReview?.required) {
         onToast('Generating design review checklist...');
         if (finalOutput) {
+            if (signal.aborted) throw new UserCancelledError();
             const checklist = await generateDesignReviewChecklist(finalOutput);
              finalPhaseState = { ...finalPhaseState, status: 'in-review', designReview: { ...phase.designReview, checklist: checklist } };
-            onUpdate(finalPhaseState);
+            onUpdate({ phaseId: phase.id, phaseUpdates: finalPhaseState });
             onToast('Design review generated. Auto-completing...');
             finalPhaseState = { ...finalPhaseState, status: 'completed' };
         } else {
@@ -694,24 +820,7 @@ export const runAutomatedPhaseGeneration = async (project: Project, phase: Phase
         finalPhaseState = { ...finalPhaseState, status: 'completed' };
     }
     
-    onUpdate(finalPhaseState);
-
-    // After phase completion, generate assets
-    try {
-        onToast(`Generating visual assets for ${phase.name}...`);
-        const updatedProjectForAssets = {
-            ...project,
-            phases: project.phases.map(p => p.id === phase.id ? { ...phase, ...finalPhaseState } : p)
-        };
-        const newDocs = await generatePhaseVisualAssets(updatedProjectForAssets, { ...phase, ...finalPhaseState });
-        if (newDocs.length > 0) {
-            onToast(`${newDocs.length} visual assets generated and saved.`, 'success');
-            return newDocs;
-        }
-    } catch (error: any) {
-        onToast(`Failed to generate visual assets: ${error.message}`, 'error');
-    }
-    return [];
+    onUpdate({ phaseId: phase.id, phaseUpdates: finalPhaseState });
 };
 
 export const generateDiagram = async (documentContent: string): Promise<string> => {

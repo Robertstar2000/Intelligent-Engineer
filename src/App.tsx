@@ -1,7 +1,9 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useProject } from './context/ProjectContext';
-import { Project, Phase, Comment, Task, ToastMessage, SearchResult, Message } from './types';
+// fix: Import the `Sprint` type to resolve a TypeScript error.
+import { Project, Phase, Comment, Task, ToastMessage, SearchResult, Message, MetaDocument, Sprint } from './types';
 
 import { LandingPage } from './pages/LandingPage';
 import { ProjectSelectionView } from './pages/ProjectSelectionView';
@@ -15,7 +17,7 @@ import { TaskManagementPage } from './components/TaskManagementPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
 import { SearchResultsModal } from './components/SearchResultsModal';
 
-import { runAutomatedPhaseGeneration } from './services/geminiService';
+import { runAutomatedPhaseGeneration, UserCancelledError } from './services/geminiService';
 import { HelpModal } from './components/HelpModal';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { NLPQueryInterface } from './components/NLPQueryInterface';
@@ -225,7 +227,7 @@ export const App = () => {
         const { signal } = automationController.current;
 
         setAutomationStatus('running');
-        setToast({ message: "Project automation started.", type: 'info' });
+        setToast({ message: automationStatus.match(/paused|error/) ? "Resuming project automation." : "Project automation started.", type: 'info' });
 
         const failedPhaseIds = new Set<string>();
 
@@ -250,40 +252,52 @@ export const App = () => {
             setToast({ message: `Automating phase: ${phase.name}...`, type: 'info' });
 
             try {
-                const newMetaDocs = await runAutomatedPhaseGeneration(
+                await runAutomatedPhaseGeneration(
                     currentProjectState,
                     phase,
-                    (updates) => {
+                    (updates: { phaseId: string, sprintId?: string, phaseUpdates?: Partial<Phase>, sprintUpdates?: Partial<Sprint>, newMetaDoc?: MetaDocument }) => {
                         if (signal.aborted) return;
                         const latestProjectState = projectStateRef.current;
                         if (!latestProjectState) return;
+                
+                        let newProjectState = { ...latestProjectState };
+                
+                        if (updates.phaseId) {
+                            const updatedPhases = newProjectState.phases.map(p => {
+                                if (p.id === updates.phaseId) {
+                                    let newPhase = { ...p, ...updates.phaseUpdates };
+                                    if (updates.sprintId && updates.sprintUpdates) {
+                                        newPhase.sprints = newPhase.sprints.map(s => 
+                                            s.id === updates.sprintId ? { ...s, ...updates.sprintUpdates } : s
+                                        );
+                                    }
+                                    return newPhase;
+                                }
+                                return p;
+                            });
+                            newProjectState = { ...newProjectState, phases: updatedPhases };
+                        }
+                
+                        if (updates.newMetaDoc) {
+                            newProjectState = {
+                                ...newProjectState,
+                                metaDocuments: [...(newProjectState.metaDocuments || []), updates.newMetaDoc]
+                            };
+                        }
                         
-                        const latestPhaseState = latestProjectState.phases.find(p => p.id === phase.id)!;
-                        const updatedPhase = { ...latestPhaseState, ...updates };
-                        const updatedPhases = latestProjectState.phases.map(p => p.id === phase.id ? updatedPhase : p);
-                        
-                        const newProjectState = { ...latestProjectState, phases: updatedPhases };
                         projectStateRef.current = newProjectState;
                         updateProject(newProjectState);
                     },
                     (message, type = 'info') => {
                         if (signal.aborted) return;
                         setToast({ message, type: type as 'info' | 'success' | 'error' })
-                    }
+                    },
+                    signal
                 );
-                
-                if (newMetaDocs && newMetaDocs.length > 0) {
-                    const latestProjectState = projectStateRef.current;
-                    if (latestProjectState) {
-                        const updatedProject = {
-                            ...latestProjectState,
-                            metaDocuments: [...(latestProjectState.metaDocuments || []), ...newMetaDocs],
-                        };
-                        projectStateRef.current = updatedProject;
-                        updateProject(updatedProject);
-                    }
-                }
             } catch (error: any) {
+                if (error instanceof UserCancelledError) {
+                    break;
+                }
                 if (signal.aborted) break;
                 setToast({ message: `Skipping phase "${phase.name}" due to an error. It can be completed manually.`, type: 'error' });
                 failedPhaseIds.add(phase.id);
