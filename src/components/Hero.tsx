@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from './ui';
-import { GitBranch, FileText, CheckSquare, Clock } from 'lucide-react';
+import { GitBranch, FileText, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
 
 export const Hero = ({ onLoginClick }) => {
   return (
@@ -13,9 +13,10 @@ export const Hero = ({ onLoginClick }) => {
           An AI-powered companion guiding you through the full engineering lifecycle. Generate your first three foundational documents to build a strong base. Then, choose your workflow: continue manually, generating and reviewing each document, or engage the Automation Engine to draft the entire project for you to refine.
         </p>
 
-        <div className="max-w-3xl mx-auto my-8 p-4 bg-yellow-400/10 border border-yellow-400/30 rounded-lg">
-            <p className="text-yellow-200">
-                This application is designed to interact with a human designer. It is required that you review and edit the result before use. It will help you greatly accelerate the time required to do a design from months to days.
+        <div className="max-w-3xl mx-auto my-8 p-4 bg-yellow-400/10 border border-yellow-400/30 rounded-lg flex items-start space-x-4">
+            <AlertTriangle className="w-8 h-8 text-yellow-300 flex-shrink-0 mt-1" />
+            <p className="text-yellow-200 text-left">
+                <strong>Important:</strong> This application is not a replacement for human engineering. It is designed to interact with a human designer to streamline the tedious process of generating documentation and to provide ideation support. It uses the <strong>Human Mediated Agentic Process (HMAP)</strong>, and it is required that you review and edit all generated results before use. This collaboration helps accelerate design time from months to days. The manual workflow is recommended for most effective use, as your reviews and edits for each phase steer and focus all subsequent generation.
             </p>
         </div>
 
