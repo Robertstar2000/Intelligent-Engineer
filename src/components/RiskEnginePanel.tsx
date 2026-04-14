@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, LoaderCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Activity, LoaderCircle, CheckCircle, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { runRiskAssessmentWorkflow, RiskWorkflowProgress } from '../services/geminiService';
@@ -27,7 +27,7 @@ const initialState: WorkflowState = {
 };
 
 
-export const RiskEnginePanel = () => {
+export const RiskEnginePanel = ({ onViewDocument }: { onViewDocument: (id: string) => void }) => {
     const { project, updateProject } = useProject();
     const [workflowState, setWorkflowState] = useState<WorkflowState>(initialState);
     
@@ -119,6 +119,14 @@ export const RiskEnginePanel = () => {
                 </Card>
                 {project?.risks && project.risks.length > 0 && (
                     <Card title="Previously Assessed Risks" className="mt-6">
+                        <div className="flex justify-end mb-2">
+                            <Button onClick={() => {
+                                const log = project.metaDocuments?.find(d => d.type === 'risk-assessment-log');
+                                if (log) onViewDocument(log.id);
+                            }} variant="outline" size="sm">
+                                <ImageIcon className="mr-2 w-4 h-4" /> View Risk Log
+                            </Button>
+                        </div>
                         <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                             {project.risks.map(risk => (
                                 <div key={risk.id} className="p-3 bg-gray-50 dark:bg-charcoal-800/50 rounded-lg">

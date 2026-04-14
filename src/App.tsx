@@ -1,11 +1,10 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useProject } from './context/ProjectContext';
-// fix: Import the `Sprint` type to resolve a TypeScript error.
-import { Project, Phase, Comment, Task, ToastMessage, SearchResult, Message, MetaDocument, Sprint } from './types';
+import { Project, Phase, Sprint, ToastMessage, SearchResult, Message, MetaDocument } from './types';
 
 import { LandingPage } from './pages/LandingPage';
+import { AuthView } from './pages/AuthView';
 import { ProjectSelectionView } from './pages/ProjectSelectionView';
 import { ProjectWizard } from './pages/ProjectWizard';
 import { Dashboard } from './pages/Dashboard';
@@ -16,8 +15,9 @@ import { TeamManagementPage } from './components/TeamManagementPage';
 import { TaskManagementPage } from './components/TaskManagementPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
 import { SearchResultsModal } from './components/SearchResultsModal';
+import { SettingsModal } from './components/SettingsModal';
 
-import { runAutomatedPhaseGeneration, UserCancelledError } from './services/geminiService';
+import { runAutomatedPhaseGeneration, runCodeGenerationWorkflow, runPromptGenerationWorkflow, UserCancelledError } from './services/geminiService';
 import { HelpModal } from './components/HelpModal';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { NLPQueryInterface } from './components/NLPQueryInterface';
@@ -28,6 +28,7 @@ import { AuthModal } from './components/AuthModal';
 import { ProjectHeader } from './components/ProjectHeader';
 
 type AutomationStatus = 'idle' | 'running' | 'paused' | 'error' | 'complete';
+type AppView = 'landing' | 'projectSelection' | 'wizard' | 'dashboard' | 'phase' | 'documents' | 'analytics' | 'team' | 'tasks' | 'integrations';
 
 declare var JSZip: any;
 
@@ -65,9 +66,18 @@ export const App = () => {
         currentUser
     } = useProject();
 
-    const [currentView, setCurrentView] = useState<'landing' | 'projectSelection' | 'wizard' | 'dashboard' | 'phase' | 'documents' | 'analytics' | 'team' | 'tasks' | 'integrations'>('landing');
-    const [selectedPhaseIndex, setSelectedPhaseIndex] = useState<number | null>(null);
+    const [currentView, setCurrentView] = useState<AppView>(() => {
+        const saved = localStorage.getItem('vibe_currentView');
+        return (saved as AppView) || 'landing';
+    });
+    
+    const [selectedPhaseIndex, setSelectedPhaseIndex] = useState<number | null>(() => {
+        const saved = localStorage.getItem('vibe_selectedPhaseIndex');
+        return saved !== null ? parseInt(saved, 10) : null;
+    });
+
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isNlpQueryOpen, setIsNlpQueryOpen] = useState(false);
     const [automationStatus, setAutomationStatus] = useState<AutomationStatus>('idle');
     const [automatingPhaseId, setAutomatingPhaseId] = useState<string | null>(null);
@@ -83,9 +93,22 @@ export const App = () => {
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
     const [docToOpenFromSearch, setDocToOpenFromSearch] = useState<string | null>(null);
     
+    // Save view state to localStorage
+    useEffect(() => {
+        localStorage.setItem('vibe_currentView', currentView);
+    }, [currentView]);
+
+    useEffect(() => {
+        if (selectedPhaseIndex !== null) {
+            localStorage.setItem('vibe_selectedPhaseIndex', selectedPhaseIndex.toString());
+        } else {
+            localStorage.removeItem('vibe_selectedPhaseIndex');
+        }
+    }, [selectedPhaseIndex]);
+
     useEffect(() => {
         if(currentUser && currentView === 'landing'){
-            setCurrentView('projectSelection');
+            // Stay on landing for now as it's the new dashboard
         } else if (!currentUser && currentView !== 'landing') {
             setCurrentView('landing');
         }
@@ -120,7 +143,6 @@ export const App = () => {
             const zip = new JSZip();
             const projectFolder = zip.folder(sanitizeFilename(currentProject.name));
     
-            // Add the full project state for backup and restoration purposes
             projectFolder.file('project_state.json', JSON.stringify(currentProject, null, 2));
     
             const summaryContent = `# Project Summary: ${currentProject.name}\n\n## Requirements\n${currentProject.requirements}\n\n## Constraints\n${currentProject.constraints}\n\n## Disciplines\n${currentProject.disciplines.join(', ')}`;
@@ -194,10 +216,16 @@ export const App = () => {
         setCurrentView('dashboard');
     };
 
+    const handleViewDocument = (id: string) => {
+        setDocToOpenFromSearch(id);
+        setCurrentView('documents');
+    };
+
     const handleCreateNew = () => setCurrentView('wizard');
 
     const handleExitProject = () => {
         setCurrentProject(null);
+        setSelectedPhaseIndex(null);
         setSearchQuery('');
         setCurrentView('projectSelection');
     };
@@ -210,31 +238,24 @@ export const App = () => {
     const handlePhaseComplete = () => {
         if (!currentProject || selectedPhaseIndex === null) return;
         const currentPhase = currentProject.phases[selectedPhaseIndex];
-        
         const isReviewRequired = currentPhase.designReview?.required && currentPhase.status !== 'in-review';
-        
         if (!isReviewRequired) {
             updatePhase(currentProject.id, currentPhase.id, { status: 'completed' });
         }
-        
         setToast({ message: `${currentPhase.name} phase updated.`, type: 'success' });
     };
 
     const handleAutomateProject = async () => {
         if (!projectStateRef.current) return;
-
         automationController.current = new AbortController();
         const { signal } = automationController.current;
-
         setAutomationStatus('running');
         setToast({ message: automationStatus.match(/paused|error/) ? "Resuming project automation." : "Project automation started.", type: 'info' });
-
         const failedPhaseIds = new Set<string>();
 
         while (!signal.aborted) {
             const currentProjectState = projectStateRef.current;
             if (!currentProjectState) break;
-
             const phaseIndex = currentProjectState.phases.findIndex(p => p.status !== 'completed' && !failedPhaseIds.has(p.id));
             if (phaseIndex === -1) {
                 if(failedPhaseIds.size > 0) {
@@ -246,23 +267,20 @@ export const App = () => {
                 }
                 break;
             }
-
             const phase = currentProjectState.phases[phaseIndex];
             setAutomatingPhaseId(phase.id);
             setToast({ message: `Automating phase: ${phase.name}...`, type: 'info' });
-
             try {
                 await runAutomatedPhaseGeneration(
                     currentProjectState,
                     phase,
-                    (updates: { phaseId: string, sprintId?: string, phaseUpdates?: Partial<Phase>, sprintUpdates?: Partial<Sprint>, newMetaDoc?: MetaDocument }) => {
+                    (updates: { phaseId: string, sprintId?: string, phaseUpdates?: Partial<Phase>, sprintUpdates?: Partial<Sprint>, newMetaDocs?: MetaDocument[] }) => {
                         if (signal.aborted) return;
                         const latestProjectState = projectStateRef.current;
                         if (!latestProjectState) return;
-                
                         let newProjectState = { ...latestProjectState };
-                
                         if (updates.phaseId) {
+                            console.log(`[App] Updating phase ${updates.phaseId} with updates:`, updates.phaseUpdates);
                             const updatedPhases = newProjectState.phases.map(p => {
                                 if (p.id === updates.phaseId) {
                                     let newPhase = { ...p, ...updates.phaseUpdates };
@@ -277,14 +295,12 @@ export const App = () => {
                             });
                             newProjectState = { ...newProjectState, phases: updatedPhases };
                         }
-                
-                        if (updates.newMetaDoc) {
+                        if (updates.newMetaDocs && updates.newMetaDocs.length > 0) {
                             newProjectState = {
                                 ...newProjectState,
-                                metaDocuments: [...(newProjectState.metaDocuments || []), updates.newMetaDoc]
+                                metaDocuments: [...(newProjectState.metaDocuments || []), ...updates.newMetaDocs]
                             };
                         }
-                        
                         projectStateRef.current = newProjectState;
                         updateProject(newProjectState);
                     },
@@ -295,25 +311,51 @@ export const App = () => {
                     signal
                 );
             } catch (error: any) {
-                if (error instanceof UserCancelledError) {
-                    break;
-                }
+                if (error instanceof UserCancelledError) break;
                 if (signal.aborted) break;
                 setToast({ message: `Skipping phase "${phase.name}" due to an error. It can be completed manually.`, type: 'error' });
                 failedPhaseIds.add(phase.id);
             }
         }
-        
         if (signal.aborted) {
             setToast({ message: 'Automation paused by user.', type: 'info' });
             setAutomationStatus('paused');
         }
-
         setAutomatingPhaseId(null);
     };
     
-    const handleStopAutomation = () => {
-        automationController.current.abort();
+    const handleStopAutomation = () => automationController.current.abort();
+
+    const handleRunCodeGeneration = async () => {
+        if (!currentProject) return;
+        automationController.current = new AbortController();
+        setToast({ message: "Starting Code Generation...", type: 'info' });
+        try {
+            await runCodeGenerationWorkflow(currentProject, (updates: any) => {
+                const newProjectState = { ...currentProject, metaDocuments: [...(currentProject.metaDocuments || []), ...updates.newMetaDocs] };
+                updateProject(newProjectState);
+            }, (msg: string, type: any) => setToast({ message: msg, type }), automationController.current.signal);
+            setToast({ message: "Code Generation Complete!", type: 'success' });
+        } catch (error: any) {
+            if (error instanceof UserCancelledError) setToast({ message: "Code Generation stopped.", type: 'info' });
+            else setToast({ message: "Code Generation failed.", type: 'error' });
+        }
+    };
+
+    const handleRunPromptGeneration = async () => {
+        if (!currentProject) return;
+        automationController.current = new AbortController();
+        setToast({ message: "Starting Prompt Generation...", type: 'info' });
+        try {
+            await runPromptGenerationWorkflow(currentProject, (updates: any) => {
+                const newProjectState = { ...currentProject, metaDocuments: [...(currentProject.metaDocuments || []), ...updates.newMetaDocs] };
+                updateProject(newProjectState);
+            }, (msg: string, type: any) => setToast({ message: msg, type }), automationController.current.signal);
+            setToast({ message: "Prompt Generation Complete!", type: 'success' });
+        } catch (error: any) {
+            if (error instanceof UserCancelledError) setToast({ message: "Prompt Generation stopped.", type: 'info' });
+            else setToast({ message: "Prompt Generation failed.", type: 'error' });
+        }
     };
 
     const handleSearch = (query: string) => {
@@ -321,10 +363,8 @@ export const App = () => {
             setSearchResults([]);
             return;
         }
-
         const results: SearchResult[] = [];
         const queryLower = query.toLowerCase();
-        
         const allDocs = [];
         currentProject.phases.forEach(phase => {
             const latestPhaseOutput = phase.outputs[phase.outputs.length - 1];
@@ -339,7 +379,6 @@ export const App = () => {
             });
         });
         (currentProject.metaDocuments || []).forEach(doc => allDocs.push({ id: doc.id, name: doc.name, content: doc.content }));
-
         for (const doc of allDocs) {
             if (!doc.content) continue;
             const contentLower = doc.content.toLowerCase();
@@ -348,12 +387,7 @@ export const App = () => {
                 const start = Math.max(0, index - 50);
                 const end = Math.min(doc.content.length, index + query.length + 50);
                 const snippet = `...${doc.content.substring(start, end)}...`;
-                results.push({
-                    docId: doc.id,
-                    docName: doc.name,
-                    snippet: snippet,
-                    query: query,
-                });
+                results.push({ docId: doc.id, docName: doc.name, snippet: snippet, query: query });
             }
         }
         setSearchResults(results);
@@ -367,29 +401,19 @@ export const App = () => {
     };
 
     const renderContent = () => {
-        if (!currentUser) {
-            return <LandingPage onLoginClick={() => setIsAuthModalOpen(true)} />;
-        }
-
-        if (currentView === 'projectSelection') {
-            return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
-        }
-        if (currentView === 'wizard') {
-            return <ProjectWizard onProjectCreated={(p) => { setCurrentProject(p); setCurrentView('dashboard'); }} onCancel={() => setCurrentView('projectSelection')} />;
-        }
-
-        if (!currentProject) {
-             return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
-        }
+        if (!currentUser) return <AuthView />;
+        if (currentView === 'landing') return <LandingPage onOpenDatabase={() => setCurrentView('projectSelection')} onInitiateProtocol={() => setCurrentView('wizard')} />;
+        if (currentView === 'projectSelection') return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
+        if (currentView === 'wizard') return <ProjectWizard onProjectCreated={(p) => { setCurrentProject(p); setCurrentView('dashboard'); }} onCancel={() => setCurrentView('projectSelection')} setToast={setToast} />;
+        if (!currentProject) return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
 
         const projectHeaderProps = {
             onGoHome: currentView === 'dashboard' ? handleExitProject : () => setCurrentView('dashboard'),
-            theme,
-            setTheme,
+            theme, setTheme,
             showBackButton: currentView !== 'dashboard',
-            searchQuery,
-            setSearchQuery,
+            searchQuery, setSearchQuery,
             onSearch: handleSearch,
+            onOpenSettings: () => setIsSettingsModalOpen(true),
         };
         
         switch (currentView) {
@@ -397,11 +421,16 @@ export const App = () => {
                 return <Dashboard 
                     onSelectPhase={handleSelectPhase}
                     onExitProject={handleExitProject}
+                    onDownloadArchive={handleSaveProject}
+                    onOpenSettings={() => setIsSettingsModalOpen(true)}
                     automationStatus={automationStatus}
                     automatingPhaseId={automatingPhaseId}
                     onRunAutomation={handleAutomateProject}
                     onStopAutomation={handleStopAutomation}
+                    onRunCodeGeneration={handleRunCodeGeneration}
+                    onRunPromptGeneration={handleRunPromptGeneration}
                     onViewDocuments={() => setCurrentView('documents')}
+                    onViewDocument={handleViewDocument}
                     onViewAnalytics={() => setCurrentView('analytics')}
                     onViewTeam={() => setCurrentView('team')}
                     onViewTasks={() => setCurrentView('tasks')}
@@ -422,6 +451,7 @@ export const App = () => {
                             phase={phase}
                             onPhaseComplete={handlePhaseComplete}
                             onReturnToDashboard={() => setCurrentView('dashboard')}
+                            onDownloadArchive={handleSaveProject}
                             setToast={setToast}
                         />
                     </div>
@@ -442,7 +472,6 @@ export const App = () => {
             case 'integrations':
                 return <IntegrationsPage onBack={() => setCurrentView('dashboard')} />;
             default:
-                 // FIX: Corrected props passed to ProjectSelectionView
                  return <ProjectSelectionView onSelectProject={handleSelectProject} onCreateNew={handleCreateNew} theme={theme} setTheme={setTheme} setToast={setToast} />;
         }
     };
@@ -456,6 +485,11 @@ export const App = () => {
                 onClose={() => setIsSearchModalOpen(false)}
                 results={searchResults}
                 onSelect={handleSelectSearchResult}
+            />
+            <SettingsModal
+                isOpen={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
+                setToast={setToast}
             />
             {currentUser && (
               <>

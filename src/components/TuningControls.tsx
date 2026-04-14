@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card } from './ui';
 
@@ -67,12 +68,11 @@ export const TuningControls = ({ settings, onChangeSettings, title = "Tuning Con
     const activeProfileName = getActiveProfileName(settings);
     
     const handleProfileSelect = (profile) => {
-        const newSettings = { ...settings };
-        for (const key in profile.settings) {
-            if (key in newSettings) {
-                newSettings[key] = profile.settings[key];
-            }
-        }
+        // Merge the profile settings into the current settings
+        // This ensures new keys from the profile are added, while keeping existing keys that aren't in the profile (if any)
+        // Ideally, for a strict profile switch, we might want to just replace, but merging preserves context better in this wizard flow.
+        // However, to ensure the profile is fully applied, we prioritize profile settings.
+        const newSettings = { ...settings, ...profile.settings };
         onChangeSettings(newSettings);
     };
 

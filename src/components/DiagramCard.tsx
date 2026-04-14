@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Image as ImageIcon, Download, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Button, Card } from './ui';
@@ -17,19 +18,22 @@ export const DiagramCard: React.FC<DiagramCardProps> = ({ phase, project, onUpda
     const [isLoading, setIsLoading] = useState(false);
 
     const handleGenerate = async () => {
-        if (!phase.output) return;
+        if (!phase.outputs || phase.outputs.length === 0) return;
+        const latestOutput = phase.outputs[phase.outputs.length - 1].content;
         setIsLoading(true);
         setExternalError('');
         try {
-            const diagramUrl = await generateDiagram(phase.output);
+            const diagramUrl = await generateDiagram(latestOutput, phase.name);
             onUpdatePhase(phase.id, { diagramUrl });
 
+            // Fix: Added missing parentEntityId
             const newDoc: MetaDocument = {
                 id: `meta-diagram-${phase.id}-${Date.now()}`,
                 name: `${phase.name} - Visual Summary Diagram`,
                 content: diagramUrl,
                 type: 'diagram',
                 createdAt: new Date(),
+                parentEntityId: phase.id
             };
             const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
             updateProject({ ...project, metaDocuments: updatedMetaDocs });

@@ -1,3 +1,4 @@
+
 export interface Message {
   id: number;
   sender: 'user' | 'team' | 'system';
@@ -36,6 +37,7 @@ export interface Sprint {
   selectedTool?: string;
   chatLog?: Message[];
   generatedDocId?: string;
+  activeAssetTypes?: string[];
 }
 
 export interface TuningSettings {
@@ -65,14 +67,19 @@ export interface Phase {
   chatLog?: Message[];
   reviewStartDate?: string;
   reviewEndDate?: string;
+  activeAssetTypes?: string[];
 }
 
 export interface User {
   id: string;
   name: string;
+  username?: string;
   email: string;
   role: string;
+  occupation?: string;
   avatar: string;
+  passwordHash?: string;
+  geminiKey?: string;
 }
 
 export interface Comment {
@@ -141,9 +148,9 @@ export interface MetaDocument {
   id: string;
   name: string;
   content: string;
-  type: 'executive-summary' | 'code-vibe-prompt' | 'simulation-vibe-prompt' | 'diagram' | 'wireframe' | 'schematic' | 'risk-assessment-log' | 'resource-analysis-log' | 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula' | 'recommendations-log' | 'team-roles-suggestion'
-    | 'threat-model-report' | 'compliance-traceability-matrix' | 'feasibility-study-report';
+  type: string; // Keeping it generic to handle standard/advanced types
   createdAt: Date;
+  parentEntityId: string; // To track which phase/sprint it belongs to
 }
 
 export interface Project {
@@ -173,6 +180,8 @@ export interface Project {
   compactedContext?: string;
   metaDocuments?: MetaDocument[];
   customConcept?: string;
+  aiModel?: string;
+  collaborators?: string[];
 }
 
 export interface ToastMessage {

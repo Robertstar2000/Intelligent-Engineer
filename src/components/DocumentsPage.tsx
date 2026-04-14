@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
-import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2, FlaskConical, Eye, Lightbulb, Users } from 'lucide-react';
+import { Home, Download, FileText, Package, BrainCircuit, Bot, FileSignature, LoaderCircle, ChevronDown, Edit3, Save, Image as ImageIcon, X, Video, CircuitBoard, Printer, Code2, FlaskConical, Eye, Lightbulb, Users, Layout } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { Button, Card, Badge } from './ui';
 import { Project, Phase, ToastMessage, MetaDocument, Message, VersionedOutput } from '../types';
 import { generateVibePrompt as generateVibePromptFromService, generateProjectSummary } from '../services/geminiService';
 import { Remarkable } from 'remarkable';
 import { MarkdownEditor } from './MarkdownEditor';
+import { ProjectHeader } from './ProjectHeader';
 
 
 declare const JSZip: any;
@@ -37,10 +39,10 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
     const [editedContent, setEditedContent] = useState('');
 
     const documentType = document?.type || 'unknown';
-    const isVisualAsset = document && ['Diagram', 'Wireframe', 'Schematic', 'PWB Layout (SVG)', '2D Image', 'Chemical Formula (SVG)'].includes(documentType);
-    const isVideoAsset = document && documentType === '3D Video (VEO)';
-    const is3dFile = document && documentType === '3D Print File (STL)';
-    const isCodeFile = document && documentType === 'Software Code';
+    const isVisualAsset = document && ['Diagram', 'Wireframe', 'Schematic', 'PWB Layout (SVG)', '2D Image', 'Chemical Formula (SVG)', 'diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '2d-image', 'chemical-formula'].includes(documentType);
+    const isVideoAsset = document && (documentType === '3D Video (VEO)' || documentType === '3d-image-veo');
+    const is3dFile = document && (documentType === '3D Print File (STL)' || documentType === '3d-printing-file');
+    const isCodeFile = document && (documentType === 'Software Code' || documentType === 'software-code');
     const isReadOnly = document && (documentType === 'Chat Log' || isVisualAsset || isVideoAsset || is3dFile || isCodeFile);
 
     useEffect(() => {
@@ -71,7 +73,7 @@ const DocumentEditorModal = ({ isOpen, onClose, document, onSave }) => {
              return <div className="p-4 flex-grow flex items-center justify-center bg-gray-900"><video src={`${document.content}&key=${process.env.API_KEY}`} controls className="max-w-full max-h-full rounded-lg shadow-lg"/></div>;
         }
         if (is3dFile) {
-            return <div className="p-4 flex-grow flex items-center justify-center bg-gray-100 dark:bg-charcoal-900/50 text-center"><div className="p-6 border-2 border-dashed rounded-lg dark:border-gray-600"><Printer className="w-12 h-12 mx-auto text-gray-400"/><h3 className="mt-2 font-semibold">3D Print File</h3><p className="text-sm text-gray-500">Preview not available for .stl files.</p></div></div>;
+            return <div className="p-4 flex-grow flex items-center justify-center bg-gray-100 dark:bg-charcoal-900/50 text-center"><div className="p-6 border-2 border-dashed rounded-lg dark:border-charcoal-700"><Printer className="w-12 h-12 mx-auto text-gray-400"/><h3 className="mt-2 font-semibold">3D Print File</h3><p className="text-sm text-gray-500">Preview not available for .stl files.</p></div></div>;
         }
         if (isCodeFile && !isEditing) {
              const language = 'javascript'; // Defaulting to JS, can be improved with metadata
@@ -121,11 +123,20 @@ const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
         'Wireframe': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
         'Schematic': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
         '2D Image': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'diagram': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'wireframe': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        'schematic': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
+        '2d-image': { ext: 'png', mime: 'image/png', label: 'Image (.png)', isBinary: true },
         'PWB Layout (SVG)': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
         'Chemical Formula (SVG)': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
+        'pwb-layout-svg': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
+        'chemical-formula': { ext: 'svg', mime: 'image/svg+xml', label: 'SVG (.svg)' },
         '3D Video (VEO)': { ext: 'mp4', mime: 'video/mp4', label: 'Video (.mp4)', isBinary: true },
+        '3d-image-veo': { ext: 'mp4', mime: 'video/mp4', label: 'Video (.mp4)', isBinary: true },
         '3D Print File (STL)': { ext: 'stl', mime: 'model/stl', label: 'STL (.stl)' },
-        'Software Code': { ext: 'js', mime: 'text/javascript', label: 'Code (.js)' }
+        '3d-printing-file': { ext: 'stl', mime: 'model/stl', label: 'STL (.stl)' },
+        'Software Code': { ext: 'js', mime: 'text/javascript', label: 'Code (.js)' },
+        'software-code': { ext: 'js', mime: 'text/javascript', label: 'Code (.js)' }
     };
 
     const isAsset = Object.keys(assetTypes).includes(documentType);
@@ -135,7 +146,7 @@ const DownloadDropdown = ({ documentName, documentContent, documentType }) => {
             const assetInfo = assetTypes[documentType];
             const filename = `${sanitizeFilename(documentName)}.${assetInfo.ext}`;
             if (assetInfo.isBinary) {
-                if (documentType === '3D Video (VEO)') {
+                if (documentType === '3D Video (VEO)' || documentType === '3d-image-veo') {
                     const response = await fetch(`${documentContent}&key=${process.env.API_KEY}`);
                     const blob = await response.blob();
                     downloadFile(filename, URL.createObjectURL(blob), assetInfo.mime);
@@ -229,12 +240,13 @@ interface DocumentsPageProps {
 }
 
 export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, initialDocToOpenId, onClearInitialDoc }) => {
-    const { project, updateProject } = useProject();
+    const { project, updateProject, theme, setTheme } = useProject();
     const [isLoading, setIsLoading] = useState<string | null>(null);
     const [isZipping, setIsZipping] = useState(false);
     const [editingDocument, setEditingDocument] = useState<{ id: string; name: string; content: string; type: string; } | null>(null);
 
     const allDocuments = React.useMemo(() => {
+        console.log("DocumentsPage: allDocuments re-computing, project:", project);
         if (!project) return [];
         const docs = [];
         project.phases.forEach(phase => {
@@ -290,6 +302,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
             };
             docs.push({ id: doc.id, name: doc.name, content: doc.content, type: typeMap[doc.type] || doc.type });
         });
+        console.log("DocumentsPage: allDocuments computed:", docs);
         return docs;
     }, [project]);
 
@@ -323,12 +336,14 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
         setIsLoading(type);
         try {
             const promptText = await generateVibePromptFromService(project, type);
+            // Fix: Added missing parentEntityId
             const newDoc: MetaDocument = {
                 id: crypto.randomUUID(),
                 name: `${project.name} - ${type_map[type]}`,
                 content: promptText,
                 type: `${type}-vibe-prompt`,
                 createdAt: new Date(),
+                parentEntityId: project.id
             };
             const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
             updateProject({...project, metaDocuments: updatedMetaDocs});
@@ -347,12 +362,14 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
         setIsLoading('summary');
         try {
             const summaryText = await generateProjectSummary(project);
+            // Fix: Added missing parentEntityId
             const newDoc: MetaDocument = {
                 id: crypto.randomUUID(),
                 name: `${project.name} - Executive Summary`,
                 content: summaryText,
                 type: 'executive-summary',
                 createdAt: new Date(),
+                parentEntityId: project.id
             };
             const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
             updateProject({...project, metaDocuments: updatedMetaDocs});
@@ -503,8 +520,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
     const getIconForType = (type: string) => {
         const iconMap: { [key: string]: React.ReactNode } = {
             'Diagram': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
-            'Wireframe': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
-            'Schematic': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'Wireframe': <Layout className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'Schematic': <CircuitBoard className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
             '2D Image': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
             'PWB Layout (SVG)': <CircuitBoard className="w-5 h-5 text-green-500 flex-shrink-0" />,
             'Chemical Formula (SVG)': <FlaskConical className="w-5 h-5 text-indigo-500 flex-shrink-0" />,
@@ -513,20 +530,81 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
             'Software Code': <Code2 className="w-5 h-5 text-blue-500 flex-shrink-0" />,
             'AI Recommendations': <Lightbulb className="w-5 h-5 text-yellow-500 flex-shrink-0" />,
             'AI Team Suggestion': <Users className="w-5 h-5 text-teal-500 flex-shrink-0" />,
+            // Normalizing keys
+            'diagram': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'wireframe': <Layout className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'schematic': <CircuitBoard className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            '2d-image': <ImageIcon className="w-5 h-5 text-brand-secondary flex-shrink-0" />,
+            'pwb-layout-svg': <CircuitBoard className="w-5 h-5 text-green-500 flex-shrink-0" />,
+            'chemical-formula': <FlaskConical className="w-5 h-5 text-indigo-500 flex-shrink-0" />,
+            '3d-image-veo': <Video className="w-5 h-5 text-purple-500 flex-shrink-0" />,
+            '3d-printing-file': <Printer className="w-5 h-5 text-gray-500 flex-shrink-0" />,
+            'software-code': <Code2 className="w-5 h-5 text-blue-500 flex-shrink-0" />,
         };
         return iconMap[type] || <FileText className="w-5 h-5 text-brand-primary flex-shrink-0" />;
     };
 
+    const renderArtifactCard = (title: string, type: string, phaseName: string | undefined, doc: any, image: any) => {
+        if (!doc && !image) return null;
+        
+        return (
+            <div key={doc?.id || image?.id} className="group relative flex flex-col justify-between p-4 bg-white dark:bg-charcoal-800 border dark:border-charcoal-700 rounded-xl hover:shadow-lg transition-all duration-300">
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <Badge>{type}</Badge>
+                        {phaseName && <Badge variant="info">{phaseName}</Badge>}
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-gray-100 dark:bg-charcoal-700 text-gray-600 dark:text-gray-300">
+                            {getIconForType(type)}
+                        </div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-2">{title}</h3>
+                    </div>
+                </div>
+                
+                <div className="space-y-3 mt-4 pt-4 border-t dark:border-charcoal-700/50">
+                    <div className="flex items-center gap-2">
+                        {doc && (
+                            <Button size="sm" variant="ghost" className="flex-1 justify-start" onClick={() => setEditingDocument(doc)}>
+                                <FileText className="w-4 h-4 mr-2" /> View Doc
+                            </Button>
+                        )}
+                        {image && (
+                            <Button size="sm" variant="ghost" className="flex-1 justify-start" onClick={() => setEditingDocument({ ...image, type: 'Diagram' })}>
+                                <ImageIcon className="w-4 h-4 mr-2" /> View Image
+                            </Button>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {doc && (
+                            <div className="flex-1">
+                                <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={doc.type} />
+                            </div>
+                        )}
+                        {image && (
+                            <div className="flex-1">
+                                <DownloadDropdown documentName={image.name} documentContent={image.content || ''} documentType="Diagram" />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+            <ProjectHeader 
+                onGoHome={onBack} 
+                theme={theme} 
+                setTheme={setTheme} 
+                showBackButton
+            />
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Documents</h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">{project.name}</p>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Artifacts</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">Generated documentation, diagrams, and visual assets for {project.name}.</p>
                 </div>
-                <Button variant="outline" onClick={onBack}>
-                    <Home className="mr-2 w-4 h-4" />Back to Dashboard
-                </Button>
             </div>
             
              <Card title="Project Exports & Handoffs" description="Generate comprehensive project artifacts for other tools and team members." className="mb-6">
@@ -554,28 +632,55 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ onBack, setToast, 
                 </div>
             </Card>
 
-            <Card title="All Documents" description="View, edit, and download markdown files for each completed phase and generated artifact.">
-                <div className="space-y-3">
-                    {allDocuments.length > 0 ? allDocuments.map(doc => (
-                        <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-charcoal-800/50 rounded-lg">
-                            <div className="flex items-center space-x-3 min-w-0">
-                                {getIconForType(doc.type)}
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-900 dark:text-white truncate">{doc.name}</p>
+            <Card title="Artifact Gallery" description="All generated files and visuals.">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {project.phases.map(phase => {
+                        const phaseDoc = allDocuments.find(d => d.id === `phase-${phase.id}`);
+                        const phaseImage = project.metaDocuments?.find(d => d.parentEntityId === phase.id && d.type === 'diagram');
+                        
+                        const sprintArtifacts = phase.sprints.map(sprint => {
+                            const sprintDoc = allDocuments.find(d => d.id === `sprint-${sprint.id}`);
+                            const sprintImage = project.metaDocuments?.find(d => d.parentEntityId === sprint.id && d.type === 'diagram');
+                            return { sprint, sprintDoc, sprintImage };
+                        });
+
+                        return (
+                            <React.Fragment key={phase.id}>
+                                {renderArtifactCard(phase.name, 'Phase', undefined, phaseDoc, phaseImage)}
+                                {sprintArtifacts.map(({ sprint, sprintDoc, sprintImage }) => 
+                                    renderArtifactCard(sprint.name, 'Sprint', phase.name, sprintDoc, sprintImage)
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+                    
+                    {/* Other Meta Documents that are not phase/sprint images */}
+                    {project.metaDocuments?.filter(doc => 
+                        !project.phases.some(p => p.id === doc.parentEntityId) && 
+                        !project.phases.some(p => p.sprints.some(s => s.id === doc.parentEntityId))
+                    ).map(doc => (
+                        <div key={doc.id} className="group relative flex flex-col justify-between p-4 bg-white dark:bg-charcoal-800 border dark:border-charcoal-700 rounded-xl hover:shadow-lg transition-all duration-300">
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
                                     <Badge>{doc.type}</Badge>
-                                    {doc.phaseName && <Badge className="ml-1">{doc.phaseName}</Badge>}
+                                </div>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 rounded-lg bg-gray-100 dark:bg-charcoal-700 text-gray-600 dark:text-gray-300">
+                                        {getIconForType(doc.type)}
+                                    </div>
+                                    <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-2">{doc.name}</h3>
                                 </div>
                             </div>
-                             <div className="flex items-center space-x-2 flex-shrink-0">
-                                <Button size="sm" variant="outline" onClick={() => setEditingDocument(doc)}>
-                                    <Eye className="mr-2 w-4 h-4" /> View
+                            
+                            <div className="flex items-center gap-2 mt-4 pt-4 border-t dark:border-charcoal-700/50">
+                                <Button size="sm" variant="ghost" className="flex-1" onClick={() => setEditingDocument(doc)}>
+                                    <Eye className="w-4 h-4 mr-2" /> View
                                 </Button>
+                                <div className="h-4 w-px bg-gray-200 dark:bg-charcoal-700"></div>
                                 <DownloadDropdown documentName={doc.name} documentContent={doc.content || ''} documentType={doc.type} />
                             </div>
                         </div>
-                    )) : (
-                        <p className="text-center text-gray-500 dark:text-gray-400 py-4">No documents have been generated yet.</p>
-                    )}
+                    ))}
                 </div>
             </Card>
             <DocumentEditorModal 

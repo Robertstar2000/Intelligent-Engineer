@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { Project, Phase, Sprint, Task, ToastMessage, User } from '../types';
 import { ProjectHeader } from './ProjectHeader';
 import { Card, Button } from './ui';
-import { Plus, MoreVertical, Zap, LoaderCircle, AlertTriangle } from 'lucide-react';
+import { Plus, MoreVertical, Zap, LoaderCircle, AlertTriangle, X } from 'lucide-react';
 import { generateTaskDescription, generatePhaseTasks } from '../services/geminiService';
 import { Remarkable } from 'remarkable';
 
@@ -47,20 +48,31 @@ const SuggestTasksModal = ({ onClose, setToast }) => {
 
     return (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
-            <Card title="AI Suggest Tasks" description="Select a phase to generate relevant tasks based on its documentation." className="w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <div className="space-y-4">
+            <Card className="w-full max-w-md" onClick={e => e.stopPropagation()} noPadding>
+                <div className="flex items-start justify-between p-4 border-b dark:border-charcoal-700">
                     <div>
-                        <label htmlFor="suggest-phase" className="block text-sm font-medium">Phase</label>
-                        <select id="suggest-phase" value={selectedPhaseId} onChange={e => setSelectedPhaseId(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
-                            <option value="" disabled>Select a phase...</option>
-                            {project?.phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                        <h2 className="text-xl font-bold">AI Suggest Tasks</h2>
+                        <p className="text-sm text-gray-500 mt-1">Select a phase to generate relevant tasks based on its documentation.</p>
                     </div>
-                    <div className="flex justify-end space-x-2">
-                        <Button type="button" variant="outline" onClick={onClose} disabled={isGenerating}>Cancel</Button>
-                        <Button onClick={handleGenerate} disabled={isGenerating || !selectedPhaseId}>
-                            {isGenerating ? <><LoaderCircle className="w-4 h-4 mr-2 animate-spin"/>Generating...</> : <><Zap className="w-4 h-4 mr-2"/>Generate Tasks</>}
-                        </Button>
+                    <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-charcoal-700 self-start">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="p-6">
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="suggest-phase" className="block text-sm font-medium">Phase</label>
+                            <select id="suggest-phase" value={selectedPhaseId} onChange={e => setSelectedPhaseId(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                                <option value="" disabled>Select a phase...</option>
+                                {project?.phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                            <Button type="button" variant="outline" onClick={onClose} disabled={isGenerating}>Cancel</Button>
+                            <Button onClick={handleGenerate} disabled={isGenerating || !selectedPhaseId}>
+                                {isGenerating ? <><LoaderCircle className="w-4 h-4 mr-2 animate-spin"/>Generating...</> : <><Zap className="w-4 h-4 mr-2"/>Generate Tasks</>}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Card>
@@ -131,64 +143,72 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, setToast }) => {
 
     return (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
-            <Card title="Add New Task" className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label htmlFor="task-title" className="block text-sm font-medium">Title</label>
-                        <input type="text" id="task-title" value={title} onChange={e => setTitle(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
-                    </div>
-                    <div>
-                         <div className="flex justify-between items-center">
-                            <label htmlFor="task-description" className="block text-sm font-medium">Description</label>
-                            <Button type="button" size="sm" variant="ghost" onClick={handleGenerateDescription} disabled={isGenerating || !title || !phaseId}>
-                                {isGenerating ? <LoaderCircle className="w-4 h-4 animate-spin mr-2"/> : <Zap className="w-4 h-4 mr-2"/>}
-                                Generate with AI
-                            </Button>
-                        </div>
-                        <textarea id="task-description" value={description} onChange={e => setDescription(e.target.value)} rows={4} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
+            <Card className="w-full max-w-lg" onClick={e => e.stopPropagation()} noPadding>
+                <div className="flex items-center justify-between p-4 border-b dark:border-charcoal-700">
+                    <h2 className="text-xl font-bold">Add New Task</h2>
+                    <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-charcoal-700">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="p-6">
+                    <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="task-priority" className="block text-sm font-medium">Priority</label>
-                            <select id="task-priority" value={priority} onChange={e => setPriority(e.target.value as Task['priority'])} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
-                                <option>Low</option>
-                                <option>Medium</option>
-                                <option>High</option>
-                            </select>
+                            <label htmlFor="task-title" className="block text-sm font-medium">Title</label>
+                            <input type="text" id="task-title" value={title} onChange={e => setTitle(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
+                        </div>
+                        <div>
+                             <div className="flex justify-between items-center">
+                                <label htmlFor="task-description" className="block text-sm font-medium">Description</label>
+                                <Button type="button" size="sm" variant="ghost" onClick={handleGenerateDescription} disabled={isGenerating || !title || !phaseId}>
+                                    {isGenerating ? <LoaderCircle className="w-4 h-4 animate-spin mr-2"/> : <Zap className="w-4 h-4 mr-2"/>}
+                                    Generate with AI
+                                </Button>
+                            </div>
+                            <textarea id="task-description" value={description} onChange={e => setDescription(e.target.value)} rows={4} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="task-priority" className="block text-sm font-medium">Priority</label>
+                                <select id="task-priority" value={priority} onChange={e => setPriority(e.target.value as Task['priority'])} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                                    <option>Low</option>
+                                    <option>Medium</option>
+                                    <option>High</option>
+                                </select>
+                            </div>
+                             <div>
+                                <label htmlFor="task-due-date" className="block text-sm font-medium">Due Date</label>
+                                <input type="date" id="task-due-date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="task-phase" className="block text-sm font-medium">Phase</label>
+                                <select id="task-phase" value={phaseId} onChange={e => { setPhaseId(e.target.value); setSprintId(''); }} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                                    <option value="" disabled>Select Phase</option>
+                                    {project?.phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                             <div>
+                                <label htmlFor="task-sprint" className="block text-sm font-medium">Sprint (Optional)</label>
+                                <select id="task-sprint" value={sprintId} onChange={e => setSprintId(e.target.value)} disabled={availableSprints.length === 0} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                                    <option value="">None</option>
+                                    {availableSprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
                         </div>
                          <div>
-                            <label htmlFor="task-due-date" className="block text-sm font-medium">Due Date</label>
-                            <input type="date" id="task-due-date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600" />
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="task-phase" className="block text-sm font-medium">Phase</label>
-                            <select id="task-phase" value={phaseId} onChange={e => { setPhaseId(e.target.value); setSprintId(''); }} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
-                                <option value="" disabled>Select Phase</option>
-                                {project?.phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            <label htmlFor="task-assignee" className="block text-sm font-medium">Assignee</label>
+                            <select id="task-assignee" value={assigneeId || ''} onChange={e => setAssigneeId(e.target.value || null)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
+                                <option value="">Unassigned</option>
+                                {project?.users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                             </select>
                         </div>
-                         <div>
-                            <label htmlFor="task-sprint" className="block text-sm font-medium">Sprint (Optional)</label>
-                            <select id="task-sprint" value={sprintId} onChange={e => setSprintId(e.target.value)} disabled={availableSprints.length === 0} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
-                                <option value="">None</option>
-                                {availableSprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
+                        <div className="flex justify-end space-x-2">
+                            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                            <Button type="submit">Create Task</Button>
                         </div>
-                    </div>
-                     <div>
-                        <label htmlFor="task-assignee" className="block text-sm font-medium">Assignee</label>
-                        <select id="task-assignee" value={assigneeId || ''} onChange={e => setAssigneeId(e.target.value || null)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600">
-                            <option value="">Unassigned</option>
-                            {project?.users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button type="submit">Create Task</Button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </Card>
         </div>
     );

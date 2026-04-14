@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Bot, Check, FileText, LoaderCircle, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
@@ -82,7 +83,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             const userPrompt = `Project Context:\n${context}\n\nChange Request: "${changeRequest}"\n\nIdentify the impacted documents.`;
             
             const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: userPrompt,
                 config: { systemInstruction, responseMimeType: 'application/json', responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } } }
             }), 3);
@@ -122,7 +123,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             try {
                 const doerSystemInstruction = `You are a Doer Agent, an expert technical writer. Your task is to edit a document based on a change request, using the full project context. You must adhere to these compliance standards: ${project.complianceStandards.join(', ')}. Return only the complete, updated document text. Do not add any commentary.`;
                 const doerUserPrompt = `Full Project Context:\n${fullContext}\n\nDocument to Edit: "${doc.name}"\n---BEGIN DOCUMENT---\n${doc.originalContent}\n---END DOCUMENT---\n\nChange Request: "${changeRequest}"\n\nRewrite the document to incorporate the change.`;
-                const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
+                const doerResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: doerUserPrompt, config: { systemInstruction: doerSystemInstruction } }), 3);
                 const newContent = doerResponse.text;
                 finalDocs[i] = { ...doc, newContent: newContent };
                 setImpactedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, newContent, status: 'validating' } : d));
@@ -131,7 +132,7 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
                 // QA AGENT
                 const qaSystemInstruction = "You are a QA Agent. You verify edits. Compare the original and new document versions against the change request and compliance standards. Respond in JSON with `approved: boolean` and `feedback: string`. Feedback is required if not approved.";
                 const qaUserPrompt = `Compliance Standards: ${project.complianceStandards.join(', ')}\nChange Request: "${changeRequest}"\n\nOriginal Document:\n${doc.originalContent}\n\nNew Document:\n${newContent}\n\nVerify the change.`;
-                const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }), 3);
+                const qaResponse = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: qaUserPrompt, config: { systemInstruction: qaSystemInstruction, responseMimeType: "application/json", responseSchema: {type: Type.OBJECT, properties: {approved: {type: Type.BOOLEAN}, feedback: {type: Type.STRING}}} } }), 3);
                 const qaResult = JSON.parse(qaResponse.text);
 
                 if (qaResult.approved) {
@@ -151,7 +152,6 @@ export const ChangeManagementPanel = ({ setToast }: { setToast: (toast: ToastMes
             }
         }
         
-        // Persist changes to project state by creating new versions
         if (project) {
             let updatedProject = { ...project };
             finalDocs.forEach(doc => {

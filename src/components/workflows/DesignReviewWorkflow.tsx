@@ -1,6 +1,7 @@
 import React from 'react';
 import { Remarkable } from 'remarkable';
 import { Check } from 'lucide-react';
+import { PhaseActions } from '../PhaseActions';
 import { Button, Card } from '../ui';
 import { Phase, ToastMessage, Project, MetaDocument } from '../../types';
 import { generatePhaseVisualAssets } from '../../services/geminiService';
@@ -24,10 +25,22 @@ interface WorkflowProps {
     onUpdatePhase: (phaseId: string, updates: Partial<Phase>) => void;
     onPhaseComplete: () => void;
     onGoToNext: () => void;
+    onDownloadArchive: () => void;
+    isLastPhase: boolean;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const DesignReviewWorkflow = ({ phase, project, onUpdateProject, onUpdatePhase, onPhaseComplete, onGoToNext, setToast }: WorkflowProps) => {
+export const DesignReviewWorkflow = ({ 
+    phase, 
+    project, 
+    onUpdateProject, 
+    onUpdatePhase, 
+    onPhaseComplete, 
+    onGoToNext, 
+    onDownloadArchive,
+    isLastPhase,
+    setToast 
+}: WorkflowProps) => {
     const handleChecklistChange = (itemId: string) => {
         if (!phase.designReview) return;
         const newChecklist = phase.designReview.checklist.map(item =>
@@ -95,10 +108,29 @@ export const DesignReviewWorkflow = ({ phase, project, onUpdateProject, onUpdate
                         </label>
                     ))}
                 </div>
-                <div className="mt-6 flex justify-end">
-                    <Button onClick={handleFinalizeReview} disabled={!allChecked}>
-                        <Check className="mr-2 w-4 h-4" />Finalize Review & Complete Phase
-                    </Button>
+                <div className="mt-6">
+                    <PhaseActions 
+                        phase={phase}
+                        onMarkComplete={handleFinalizeReview}
+                        onDownload={() => {
+                            if (phase.outputs.length > 0) {
+                                const latestOutput = phase.outputs[phase.outputs.length - 1].content;
+                                const blob = new Blob([latestOutput], { type: 'text/markdown' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${project.name}_${phase.name}.md`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }
+                        }}
+                        onGoToNext={onGoToNext}
+                        onPackageAll={onDownloadArchive}
+                        isLastPhase={isLastPhase}
+                        isCompletable={allChecked}
+                        reviewRequired={false} // Already in review, this button finalizes it
+                        isDownloadDisabled={phase.outputs.length === 0}
+                    />
                 </div>
             </Card>
         </>

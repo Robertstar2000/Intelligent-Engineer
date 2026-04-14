@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { ChevronDown } from 'lucide-react';
+import { InviteCollaboratorsModal } from './InviteCollaboratorsModal';
 
 export const UserSwitcher = () => {
     const { project, currentUser, setCurrentUser } = useProject();
     const [isOpen, setIsOpen] = useState(false);
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
     if (!project || !currentUser) return null;
 
-    const handleSelect = (user) => {
+    const handleSelect = (user: any) => {
         setCurrentUser(user);
         setIsOpen(false);
     };
@@ -35,8 +37,17 @@ export const UserSwitcher = () => {
                             <span className="text-sm">{user.name}</span>
                         </button>
                     ))}
+                    <div className="border-t dark:border-charcoal-700 mt-2 pt-2">
+                        <button
+                            onClick={() => { setIsInviteModalOpen(true); setIsOpen(false); }}
+                            className="w-full text-left px-4 py-2 text-sm text-brand-primary hover:bg-gray-100 dark:hover:bg-charcoal-700"
+                        >
+                            Invite Collaborators
+                        </button>
+                    </div>
                 </div>
             )}
+            {isInviteModalOpen && <InviteCollaboratorsModal onClose={() => setIsInviteModalOpen(false)} />}
         </div>
     );
 };

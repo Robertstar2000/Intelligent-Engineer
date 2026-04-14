@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
-import { Sliders, Edit3, Save, LoaderCircle, GitCommit, Clock, ArrowRightLeft } from 'lucide-react';
+import { Sliders, Edit3, Save, LoaderCircle, GitCommit, Clock, ArrowRightLeft, Sparkles, Send, X, AlertCircle } from 'lucide-react';
 import { Button, Card, ModelBadge } from './ui';
 import { Remarkable } from 'remarkable';
-import { Phase, VersionedOutput } from '../types';
+import { Project, Phase, VersionedOutput } from '../types';
 import { MarkdownEditor } from './MarkdownEditor';
-import { compareDocumentVersions } from '../services/geminiService';
+import { compareDocumentVersions, refinePhaseOutput } from '../services/geminiService';
+import { useProject } from '../context/ProjectContext';
 
 declare const Prism: any;
 
@@ -19,7 +21,7 @@ const md = new Remarkable({
                 console.error(e);
             }
         }
-        return ''; // use an empty string for no highlight
+        return '';
     },
 });
 
@@ -31,91 +33,24 @@ interface VersionHistoryProps {
 }
 
 const VersionHistory: React.FC<VersionHistoryProps> = ({ versions, selectedVersion, onSelectVersion, onCompare }) => (
-    <div className="flex items-center space-x-2 bg-gray-100 dark:bg-charcoal-900/50 p-2 rounded-md">
-        <GitCommit className="w-4 h-4 text-gray-500" />
-        <span className="text-sm font-medium">Version:</span>
+    <div className="flex items-center space-x-2 bg-gray-100 dark:bg-charcoal-900/50 p-2 rounded-md overflow-x-auto max-w-full">
+        <GitCommit className="w-4 h-4 text-gray-500 flex-shrink-0" />
         <select
             value={selectedVersion}
             onChange={(e) => onSelectVersion(Number(e.target.value))}
-            className="text-sm border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600 focus:ring-brand-primary focus:border-brand-primary"
+            className="text-xs border-gray-300 rounded-md shadow-sm dark:bg-charcoal-700 dark:border-gray-600 focus:ring-brand-primary focus:border-brand-primary min-w-[120px]"
         >
             {versions.map((v) => (
-                <option key={v.version} value={v.version}>
-                    v{v.version} ({new Date(v.createdAt).toLocaleDateString()}) - {v.reason.substring(0, 30)}...
-                </option>
+                <option key={v.version} value={v.version}>v{v.version} - {v.reason.substring(0, 20)}...</option>
             ))}
         </select>
         {versions.length > 1 && (
-            <Button size="sm" variant="ghost" onClick={onCompare}>
-                <ArrowRightLeft className="w-4 h-4 mr-2" /> Compare
+            <Button size="sm" variant="ghost" onClick={onCompare} className="whitespace-nowrap px-1">
+                <ArrowRightLeft className="w-3 h-3" />
             </Button>
         )}
     </div>
 );
-
-interface VersionComparisonModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    versions: VersionedOutput[];
-}
-
-const VersionComparisonModal: React.FC<VersionComparisonModalProps> = ({ isOpen, onClose, versions }) => {
-    const [versionAIndex, setVersionAIndex] = useState(versions.length > 1 ? versions.length - 2 : 0);
-    const [versionBIndex, setVersionBIndex] = useState(versions.length - 1);
-    const [comparison, setComparison] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-
-    useEffect(() => {
-        setComparison('');
-    }, [versionAIndex, versionBIndex]);
-
-    const handleCompare = async () => {
-        setIsLoading(true);
-        setComparison('');
-        try {
-            const versionA = versions[versionAIndex];
-            const versionB = versions[versionBIndex];
-            const result = await compareDocumentVersions(versionA.content, versionB.content, versionA.reason, versionB.reason);
-            setComparison(result);
-        } catch (error) {
-            setComparison('Error generating comparison.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
-            <Card title="Compare Document Versions" className="w-full max-w-4xl" onClick={e => e.stopPropagation()}>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="text-sm font-medium">Version A</label>
-                        <select value={versionAIndex} onChange={e => setVersionAIndex(Number(e.target.value))} className="w-full mt-1 p-2 border rounded-md dark:bg-charcoal-700 dark:border-gray-600">
-                            {versions.map((v, i) => <option key={i} value={i}>v{v.version} - {v.reason}</option>)}
-                        </select>
-                    </div>
-                     <div>
-                        <label className="text-sm font-medium">Version B</label>
-                        <select value={versionBIndex} onChange={e => setVersionBIndex(Number(e.target.value))} className="w-full mt-1 p-2 border rounded-md dark:bg-charcoal-700 dark:border-gray-600">
-                            {versions.map((v, i) => <option key={i} value={i}>v{v.version} - {v.reason}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <Button onClick={handleCompare} disabled={isLoading || versionAIndex === versionBIndex}>
-                    {isLoading ? <LoaderCircle className="animate-spin" /> : 'Compare'}
-                </Button>
-                {comparison && (
-                    <div className="mt-4 p-4 bg-gray-50 dark:bg-charcoal-900/50 rounded-lg max-h-96 overflow-y-auto">
-                        <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: md.render(comparison) }} />
-                    </div>
-                )}
-            </Card>
-        </div>
-    );
-};
-
 
 interface PhaseOutputProps {
     phase: Phase;
@@ -128,127 +63,146 @@ interface PhaseOutputProps {
 }
 
 export const PhaseOutput = ({ phase, onGenerate, onSave, isLoading, isEditable = true, apiKey, modelName }: PhaseOutputProps) => {
+    const { project } = useProject();
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutput, setEditedOutput] = useState('');
-    const [selectedVersionIndex, setSelectedVersionIndex] = useState(phase.outputs.length - 1);
-    const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+    const [selectedVersionIndex, setSelectedVersionIndex] = useState(phase.outputs.length > 0 ? phase.outputs.length - 1 : -1);
+    const [refineText, setRefineText] = useState('');
+    const [isRefining, setIsRefining] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const latestVersion = phase.outputs[phase.outputs.length - 1];
-    const displayedVersion = phase.outputs[selectedVersionIndex];
+    const displayedVersion = phase.outputs[selectedVersionIndex] || latestVersion;
 
     useEffect(() => {
         const newIndex = phase.outputs.length - 1;
         if (newIndex !== selectedVersionIndex) {
             setSelectedVersionIndex(newIndex);
         }
-    }, [phase.outputs]);
-
-    useEffect(() => {
-        if (!isEditing && displayedVersion?.content && typeof Prism !== 'undefined') {
-            setTimeout(() => Prism.highlightAll(), 0);
-        }
-    }, [isEditing, displayedVersion]);
+    }, [phase.outputs.length]);
 
     const handleSave = () => {
         onSave(editedOutput, 'Manual edit');
         setIsEditing(false);
     };
 
-    const handleCancel = () => {
-        setIsEditing(false);
-    };
-    
-    const handleEdit = () => {
-        // When editing, always edit the latest version
-        setSelectedVersionIndex(phase.outputs.length - 1);
-        setEditedOutput(latestVersion?.content || '');
-        setIsEditing(true);
+    const handleRefine = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!refineText.trim() || !project || !displayedVersion) return;
+        setIsRefining(true);
+        setError(null);
+        try {
+            const refined = await refinePhaseOutput(project, phase, displayedVersion.content, refineText);
+            onSave(refined, `AI Refinement: ${refineText}`);
+            setRefineText('');
+        } catch (err: any) {
+            setError(err.message || "Failed to refine content. The AI may be experiencing high load.");
+            console.error(err);
+        } finally {
+            setIsRefining(false);
+        }
     };
 
-    const isViewingOldVersion = selectedVersionIndex !== phase.outputs.length - 1;
+    if (!latestVersion) {
+        return (
+            <Card title="Phase Output" description="AI-generated deliverables for this phase">
+                <div className="text-center py-8">
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
+                    <div className="inline-flex flex-col items-center gap-2">
+                        <Button onClick={() => onGenerate('Initial generation')} disabled={!apiKey || isLoading}>
+                            {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Sliders className="mr-2 w-4 h-4" />}
+                            Generate Output with AI
+                        </Button>
+                        <ModelBadge modelName={modelName} />
+                    </div>
+                </div>
+            </Card>
+        );
+    }
 
     return (
-        <Card title="Phase Output" description="AI-generated deliverables for this phase">
+        <Card title="Phase Output" description="Collaborate with AI to refine this technical documentation">
             <div className="space-y-4">
-                {!latestVersion ? (
-                    <div className="text-center py-8">
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">No output generated yet.</p>
-                        <div className="inline-flex flex-col items-center gap-2">
-                            <Button onClick={() => onGenerate('Initial generation')} disabled={!apiKey || isLoading}>
-                                {isLoading ? (
-                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Generating...</>
-                                ) : (
-                                    <><Sliders className="mr-2 w-4 h-4" />Generate Output with AI</>
-                                )}
+                <div className="flex justify-between items-center gap-2 flex-wrap">
+                    <VersionHistory
+                        versions={phase.outputs}
+                        selectedVersion={displayedVersion?.version || 0}
+                        onSelectVersion={(v) => setSelectedVersionIndex(phase.outputs.findIndex(o => o.version === v))}
+                        onCompare={() => {}}
+                    />
+                    <div className="flex items-center space-x-2">
+                        {isEditable && !isEditing && (
+                            <Button variant="outline" size="sm" onClick={() => { setEditedOutput(displayedVersion.content); setIsEditing(true); }}>
+                                <Edit3 className="mr-2 w-4 h-4" />Edit
                             </Button>
-                            <ModelBadge modelName={modelName} />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center flex-wrap gap-2">
-                            <VersionHistory
-                                versions={phase.outputs}
-                                selectedVersion={displayedVersion.version}
-                                onSelectVersion={(v) => setSelectedVersionIndex(phase.outputs.findIndex(o => o.version === v))}
-                                onCompare={() => setIsCompareModalOpen(true)}
-                            />
-                            <div className="flex items-center space-x-2">
-                                {!isEditing && isEditable && (
-                                    <>
-                                        <Button variant="outline" size="sm" onClick={handleEdit}>
-                                            <Edit3 className="mr-2 w-4 h-4" />Edit
-                                        </Button>
-                                        <div className="inline-flex flex-col items-end gap-1">
-                                            <Button variant="outline" size="sm" onClick={() => onGenerate('Regeneration')} disabled={!apiKey || isLoading}>
-                                                {isLoading ? (
-                                                    <><LoaderCircle className="mr-2 w-4 h-4 animate-spin" />Regenerating...</>
-                                                ) : (
-                                                    <><Sliders className="mr-2 w-4 h-4" />Regenerate</>
-                                                )}
-                                            </Button>
-                                            <ModelBadge modelName={modelName} />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        {isEditing ? (
-                            <div className="space-y-3">
-                                <MarkdownEditor
-                                    value={editedOutput}
-                                    onChange={setEditedOutput}
-                                />
-                                <div className="flex space-x-2">
-                                    <Button size="sm" onClick={handleSave}>
-                                        <Save className="mr-2 w-4 h-4" />Save Changes
-                                    </Button>
-                                    <Button variant="outline" size="sm" onClick={handleCancel}>
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                {isViewingOldVersion && (
-                                    <div className="p-2 mb-2 text-sm bg-yellow-100 dark:bg-yellow-900/50 rounded-md flex items-center space-x-2">
-                                        <Clock className="w-4 h-4 text-yellow-700 dark:text-yellow-300" />
-                                        <span>You are viewing a past version of this document.</span>
-                                    </div>
-                                )}
-                                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                    <strong>Reason for v{displayedVersion.version}:</strong> {displayedVersion.reason}
-                                </div>
-                                <div
-                                    className="bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto prose dark:prose-invert max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: md.render(displayedVersion.content || '') }}
-                                />
+                        )}
+                        {isEditing && (
+                            <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}><X className="w-4 h-4"/></Button>
+                        )}
+                        {!isEditing && (
+                            <div className="inline-flex flex-col items-end gap-1">
+                                <Button variant="outline" size="sm" onClick={() => onGenerate('Regeneration')} disabled={!apiKey || isLoading}>
+                                    {isLoading ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Sliders className="mr-2 w-4 h-4" />}
+                                    Full Refresh
+                                </Button>
+                                <ModelBadge modelName={modelName} />
                             </div>
                         )}
                     </div>
+                </div>
+
+                {error && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm flex items-start gap-2 border border-red-100 dark:border-red-900/50">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{error}</span>
+                        <button onClick={() => setError(null)} className="ml-auto hover:opacity-70"><X className="w-4 h-4"/></button>
+                    </div>
+                )}
+
+                <div className="border rounded-lg overflow-hidden dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                    {isEditing ? (
+                        <div className="p-4 space-y-3">
+                            <MarkdownEditor value={editedOutput} onChange={setEditedOutput} />
+                            <div className="flex justify-end space-x-2">
+                                <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
+                                <Button size="sm" onClick={handleSave}><Save className="mr-2 w-4 h-4" />Save Version</Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="p-4 overflow-y-auto max-h-[60vh] prose dark:prose-invert max-w-none">
+                            {displayedVersion && (
+                                <>
+                                    {selectedVersionIndex !== phase.outputs.length - 1 && (
+                                        <div className="p-2 mb-4 text-xs bg-yellow-100 dark:bg-yellow-900/30 rounded-md text-yellow-800 dark:text-yellow-200 flex items-center">
+                                            <Clock className="w-3 h-3 mr-2" /> Viewing past version: {displayedVersion.reason}
+                                        </div>
+                                    )}
+                                    <div dangerouslySetInnerHTML={{ __html: md.render(displayedVersion.content || '') }} />
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {!isEditing && (
+                    <form onSubmit={handleRefine} className="flex items-center space-x-2 bg-white dark:bg-charcoal-800 border dark:border-charcoal-700 p-2 rounded-lg shadow-sm">
+                        <div className="p-1 px-2 text-brand-primary flex items-center">
+                            {isRefining ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                        </div>
+                        <input
+                            type="text"
+                            value={refineText}
+                            onChange={(e) => setRefineText(e.target.value)}
+                            placeholder="Prompt AI to refine content... (e.g. 'Add a risks section')"
+                            className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-1 placeholder-gray-400 dark:placeholder-gray-500"
+                            disabled={isRefining || isLoading}
+                        />
+                        <Button type="submit" size="sm" disabled={isRefining || isLoading || !refineText.trim()} className="!p-2">
+                            <Send className="w-4 h-4" />
+                        </Button>
+                    </form>
                 )}
             </div>
-            <VersionComparisonModal isOpen={isCompareModalOpen} onClose={() => setIsCompareModalOpen(false)} versions={phase.outputs} />
         </Card>
     );
 };

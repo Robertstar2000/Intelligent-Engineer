@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, ArrowRight, Home, Zap, LoaderCircle, Lightbulb } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
@@ -70,12 +71,14 @@ export const AnalyticsDashboard = ({ onBack }) => {
                 `## ${r.title} (${r.category})\n\n**Description:** ${r.description}\n\n**Actionable Step:** ${r.actionableStep}`
             ).join('\n\n---\n\n')}`;
             
+            // Fix: Added missing parentEntityId
             const newDoc: MetaDocument = {
                 id: `meta-recs-${Date.now()}`,
                 name: `${project.name} - AI Recommendations`,
                 content: markdownContent,
                 type: 'recommendations-log',
                 createdAt: new Date(),
+                parentEntityId: project.id
             };
 
             const existingDocIndex = project.metaDocuments?.findIndex(d => d.type === 'recommendations-log') ?? -1;

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2, FlaskConical, Download } from 'lucide-react';
-import { Project, Sprint, ToastMessage, MetaDocument } from '../types';
-import { Button, Card, Badge } from './ui';
-import { generateStandardVisualAsset, generateAdvancedAsset, EXTERNAL_TOOLS, runIntegrationExportWorkflow, ExportWorkflowProgress } from '../services/geminiService';
 
-declare const Prism: any;
+
+import React, { useState, useEffect } from 'react';
+import { ChevronsRight, LoaderCircle, Sparkles, AlertTriangle, CheckCircle, RefreshCw, Eye, Share2, CircuitBoard, Film, Image as ImageIcon, Printer, Code2, FlaskConical, Download, Check, X } from 'lucide-react';
+import { Project, Sprint, Phase, ToastMessage, MetaDocument } from '../types';
+import { Button, Card, Badge } from './ui';
+// Fix: Added runProjectExportWorkflow to imports
+import { EXTERNAL_TOOLS, runIntegrationExportWorkflow, runProjectExportWorkflow, ExportWorkflowProgress } from '../services/geminiService';
 
 const downloadFile = (filename: string, content: string) => {
     const element = document.createElement('a');
@@ -47,9 +48,8 @@ const ExportModal = ({ isOpen, onClose, asset, project, setToast }) => {
         setGeneratedFile(null);
 
         try {
-            const result = await runIntegrationExportWorkflow(
+            const result = await runProjectExportWorkflow(
                 project,
-                asset,
                 selectedTool,
                 (progress: ExportWorkflowProgress) => {
                     setAgentStatus(progress.status);
@@ -127,9 +127,17 @@ const ExportModal = ({ isOpen, onClose, asset, project, setToast }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100]" onClick={onClose}>
-            <Card title="Agentic Asset Export" className="w-full max-w-md" onClick={e => e.stopPropagation()}>
-                {renderContent()}
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4" onClick={onClose}>
+            <Card className="w-full max-w-md" onClick={e => e.stopPropagation()} noPadding>
+                <div className="flex items-center justify-between p-4 border-b dark:border-charcoal-700">
+                    <h2 className="text-xl font-bold">Agentic Asset Export</h2>
+                    <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-charcoal-700">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="p-6">
+                    {renderContent()}
+                </div>
             </Card>
         </div>
     );
@@ -137,177 +145,39 @@ const ExportModal = ({ isOpen, onClose, asset, project, setToast }) => {
 
 
 interface ToolIntegrationProps {
-    sprint: Sprint;
+    sprint?: Sprint;
+    phase?: Phase;
     project: Project;
     onUpdateProject: (updatedProject: Project) => void;
+    onToggleAssetType: (type: string) => void;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-type GenerationStatus = 'idle' | 'orchestrating' | 'generating' | 'generating-video' | 'qa' | 'complete' | 'error';
-type StandardToolType = 'wireframe' | 'diagram' | 'schematic';
-type AdvancedToolType = 'pwb-layout-svg' | '3d-image-veo' | '2d-image' | '3d-printing-file' | 'software-code' | 'chemical-formula';
+export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, phase, project, onUpdateProject, onToggleAssetType, setToast }) => {
+    const activeAssetTypes = sprint?.activeAssetTypes || phase?.activeAssetTypes || [];
+    const parentId = sprint?.id || phase?.id;
 
-export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, project, onUpdateProject, setToast }) => {
-    const [agentStatus, setAgentStatus] = useState<GenerationStatus>('idle');
-    const [error, setError] = useState('');
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-    
-    const generatedAsset = project.metaDocuments?.find(doc => doc.id === sprint.generatedDocId);
-    
-    useEffect(() => {
-        if (generatedAsset?.type === 'software-code') {
-            setTimeout(() => Prism.highlightAll(), 0);
-        }
-    }, [generatedAsset]);
-
-    const handleGenerate = async (toolType: StandardToolType | AdvancedToolType) => {
-        if (!project || !sprint.output) {
-            setToast({ message: 'Please generate and accept the sprint specification before creating visual assets.', type: 'error'});
-            return;
-        }
-
-        if (toolType === '3d-image-veo') {
-            if (typeof window.aistudio === 'undefined' || typeof window.aistudio.hasSelectedApiKey !== 'function') {
-                setToast({ message: 'VEO functionality is not available in this environment.', type: 'error' });
-                return;
-            }
-            const hasKey = await window.aistudio.hasSelectedApiKey();
-            if (!hasKey) {
-                await window.aistudio.openSelectKey();
-            }
-        }
-        
-        setAgentStatus('orchestrating');
-        setError('');
-        
-        try {
-            let asset: { content: string; docName: string };
-            const standardTools: StandardToolType[] = ['wireframe', 'diagram', 'schematic'];
-            
-            if (standardTools.includes(toolType as StandardToolType)) {
-                 asset = await generateStandardVisualAsset(project, sprint, toolType as StandardToolType);
-            } else {
-                if (toolType === '3d-image-veo') setAgentStatus('generating-video');
-                else setAgentStatus('generating');
-                asset = await generateAdvancedAsset(project, sprint, toolType as AdvancedToolType);
-            }
-
-            setAgentStatus('qa');
-            await new Promise(res => setTimeout(res, 1000));
-
-            const newDoc: MetaDocument = {
-                id: `meta-asset-${Date.now()}`,
-                name: asset.docName,
-                content: asset.content,
-                type: toolType,
-                createdAt: new Date(),
-            };
-
-            const updatedMetaDocs = [...(project.metaDocuments || []), newDoc];
-            const updatedPhases = project.phases.map(phase => ({
-                ...phase,
-                sprints: phase.sprints.map(s => s.id === sprint.id ? { ...s, generatedDocId: newDoc.id } : s)
-            }));
-            
-            onUpdateProject({ ...project, metaDocuments: updatedMetaDocs, phases: updatedPhases });
-            setAgentStatus('complete');
-            setToast({ message: `${asset.docName} generated successfully!`, type: 'success' });
-        } catch (err: any) {
-            setError(err.message || `Failed to generate asset.`);
-            setAgentStatus('error');
-        }
-    };
-    
-    const handleRegenerate = () => {
-        if (!project) return;
-        const updatedPhases = project.phases.map(phase => ({
-            ...phase,
-            sprints: phase.sprints.map(s => s.id === sprint.id ? { ...s, generatedDocId: undefined } : s)
-        }));
-        const updatedMetaDocs = project.metaDocuments?.filter(doc => doc.id !== sprint.generatedDocId);
-
-        onUpdateProject({ ...project, phases: updatedPhases, metaDocuments: updatedMetaDocs });
-        setAgentStatus('idle');
-    };
-    
-    const AgentStatusDisplay = () => {
-        const statusMap: { [key in GenerationStatus]?: { icon: React.ReactNode; text: string } } = {
-            orchestrating: { icon: <LoaderCircle className="animate-spin" />, text: 'Orchestrator: Crafting prompt...' },
-            generating: { icon: <LoaderCircle className="animate-spin" />, text: 'Doer: Generating asset...' },
-            'generating-video': { icon: <LoaderCircle className="animate-spin" />, text: 'VEO: Generating video (this may take a few minutes)...' },
-            qa: { icon: <LoaderCircle className="animate-spin" />, text: 'QA: Validating result...' },
-            complete: { icon: <CheckCircle />, text: 'Generation Complete' },
-            error: { icon: <AlertTriangle />, text: 'Error Occurred' },
-        };
-        const currentStatus = statusMap[agentStatus];
-        if (!currentStatus) return null;
-
-        return (
-            <div className="flex items-center space-x-2 text-sm p-2 bg-gray-100 dark:bg-charcoal-900/50 rounded-md">
-                <span className={agentStatus === 'error' ? 'text-red-500' : 'text-brand-primary'}>{currentStatus.icon}</span>
-                <span className="text-gray-600 dark:text-gray-300">{currentStatus.text}</span>
-            </div>
-        );
-    };
-
-    const renderGeneratedAsset = () => {
-        if (!generatedAsset) return null;
-        
-        const content = (
-            <div className="mt-2 p-2 bg-gray-50 dark:bg-charcoal-900/50 border dark:border-gray-700 rounded-lg max-h-64 overflow-y-auto">
-                {['wireframe', 'schematic', 'diagram', '2d-image', 'pwb-layout-svg', 'chemical-formula'].includes(generatedAsset.type) && (
-                    <img src={generatedAsset.content} alt={generatedAsset.name} className="rounded-md w-full object-contain"/>
-                )}
-                {generatedAsset.type === '3d-image-veo' && (
-                    <video src={`${generatedAsset.content}&key=${process.env.API_KEY}`} controls className="rounded-md w-full"/>
-                )}
-                {generatedAsset.type === 'software-code' && (
-                    <pre><code className="language-javascript">{generatedAsset.content}</code></pre>
-                )}
-                {generatedAsset.type === '3d-printing-file' && (
-                    <div className="text-center p-4">
-                        <Printer className="w-8 h-8 mx-auto text-gray-400"/>
-                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">3D Print file (.stl) generated. Preview not available.</p>
-                    </div>
-                )}
-            </div>
-        );
-
-        return (
-            <div className="space-y-3">
-                <p className="text-sm">Generated Asset: <span className="font-semibold">{generatedAsset.name}</span></p>
-                {content}
-                <div className="flex space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => setIsExportModalOpen(true)}>
-                        <Share2 className="w-4 h-4 mr-2"/>Export...
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleRegenerate}>
-                        <RefreshCw className="w-4 h-4 mr-2"/>Regenerate
-                    </Button>
-                </div>
-                <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} asset={generatedAsset} project={project} setToast={setToast} />
-            </div>
-        );
-    };
+    // Filter relevant generated assets for this specific phase/sprint
+    const generatedAssets = project.metaDocuments?.filter(doc => doc.parentEntityId === parentId) || [];
 
     const DISCIPLINE_TOOL_MAPPING: { [key: string]: string[] } = {
-        'Software Engineering': ['diagram', 'software-code'],
-        'Mechanical Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
-        'Aerospace Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
-        'Civil Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
-        'Electrical Engineering': ['diagram', 'schematic', 'pwb-layout-svg', '2d-image'],
-        'Biomedical Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula'],
-        'Chemical Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
-        'Environmental Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
-        'Robotics Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file'],
-        'Systems Engineering': ['diagram', 'software-code'],
+        'Software Engineering': ['diagram', 'flowchart', 'software-code'],
+        'Mechanical Engineering': ['diagram', 'wireframe', 'assembly-diagram', 'exploded-view', 'cross-section', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Aerospace Engineering': ['diagram', 'wireframe', 'assembly-diagram', 'exploded-view', 'cross-section', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Civil Engineering': ['diagram', 'wireframe', 'assembly-diagram', 'exploded-view', 'cross-section', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Electrical Engineering': ['diagram', 'schematic', 'assembly-diagram', 'pwb-layout-svg', '2d-image'],
+        'Biomedical Engineering': ['diagram', 'wireframe', 'assembly-diagram', 'exploded-view', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula'],
+        'Chemical Engineering': ['chemical-formula', 'diagram', 'flowchart', '3d-image-veo', '2d-image'],
+        'Environmental Engineering': ['chemical-formula', 'diagram', 'flowchart', '3d-image-veo', '2d-image'],
+        'Robotics Engineering': ['diagram', 'wireframe', 'assembly-diagram', 'exploded-view', '3d-image-veo', '2d-image', '3d-printing-file'],
+        'Systems Engineering': ['diagram', 'flowchart', 'software-code'],
         'Materials Engineering': ['chemical-formula', 'diagram', '3d-image-veo', '2d-image'],
-        'Agricultural Engineering': ['diagram', 'wireframe', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula']
+        'Agricultural Engineering': ['diagram', 'wireframe', 'assembly-diagram', '3d-image-veo', '2d-image', '3d-printing-file', 'chemical-formula']
     };
     
     const getVisibleTools = (disciplines: string[]): Set<string> => {
         if (!disciplines || disciplines.length === 0) {
-            return new Set(['diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
+            return new Set(['diagram', 'wireframe', 'schematic', 'assembly-diagram', 'exploded-view', 'cross-section', 'flowchart', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
         }
 
         const visibleTools = new Set<string>();
@@ -321,34 +191,77 @@ export const ToolIntegration: React.FC<ToolIntegrationProps> = ({ sprint, projec
         });
 
         if (visibleTools.size === 0) {
-            return new Set(['diagram', 'wireframe', 'schematic', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
+            return new Set(['diagram', 'wireframe', 'schematic', 'assembly-diagram', 'exploded-view', 'cross-section', 'flowchart', 'pwb-layout-svg', '3d-image-veo', '2d-image', '3d-printing-file', 'software-code', 'chemical-formula']);
         }
         return visibleTools;
     };
     
     const visibleTools = getVisibleTools(project.disciplines);
 
+    const toolDefinitions = [
+        { type: 'wireframe', label: '3D Wireframe', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'diagram', label: 'Block Diagram', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'schematic', label: 'Schematic', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'assembly-diagram', label: 'Assembly Diagram', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'exploded-view', label: 'Exploded View', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'cross-section', label: 'Cross-section', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'flowchart', label: 'Flowchart', icon: <Sparkles className="w-4 h-4 mr-2"/> },
+        { type: 'pwb-layout-svg', label: 'PWB Layout (SVG)', icon: <CircuitBoard className="w-4 h-4 mr-2"/> },
+        { type: '3d-image-veo', label: '3D Video (VEO)', icon: <Film className="w-4 h-4 mr-2"/> },
+        { type: '2d-image', label: '2D Image', icon: <ImageIcon className="w-4 h-4 mr-2"/> },
+        { type: '3d-printing-file', label: '3D Print File (STL)', icon: <Printer className="w-4 h-4 mr-2"/> },
+        { type: 'software-code', label: 'Software Code', icon: <Code2 className="w-4 h-4 mr-2"/> },
+        { type: 'chemical-formula', label: 'Chemical Formula', icon: <FlaskConical className="w-4 h-4 mr-2"/> },
+    ];
+
     return (
         <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
-             <h5 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">AI Toolkit</h5>
-             {generatedAsset ? renderGeneratedAsset() : agentStatus !== 'idle' ? (
-                <div className="space-y-2">
-                    <AgentStatusDisplay />
-                    {error && <p className="text-sm text-red-500">{error}</p>}
-                </div>
-             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                     {visibleTools.has('wireframe') && <Button size="sm" variant="outline" onClick={() => handleGenerate('wireframe')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>3D Wireframe</Button>}
-                     {visibleTools.has('diagram') && <Button size="sm" variant="outline" onClick={() => handleGenerate('diagram')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Block Diagram</Button>}
-                     {visibleTools.has('schematic') && <Button size="sm" variant="outline" onClick={() => handleGenerate('schematic')} disabled={agentStatus !== 'idle'}><Sparkles className="w-4 h-4 mr-2"/>Schematic</Button>}
-                     {visibleTools.has('pwb-layout-svg') && <Button size="sm" variant="outline" onClick={() => handleGenerate('pwb-layout-svg')} disabled={agentStatus !== 'idle'}><CircuitBoard className="w-4 h-4 mr-2"/>PWB Layout (SVG)</Button>}
-                     {visibleTools.has('3d-image-veo') && <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-image-veo')} disabled={agentStatus !== 'idle'}><Film className="w-4 h-4 mr-2"/>3D Video (VEO)</Button>}
-                     {visibleTools.has('2d-image') && <Button size="sm" variant="outline" onClick={() => handleGenerate('2d-image')} disabled={agentStatus !== 'idle'}><ImageIcon className="w-4 h-4 mr-2"/>2D Image</Button>}
-                     {visibleTools.has('3d-printing-file') && <Button size="sm" variant="outline" onClick={() => handleGenerate('3d-printing-file')} disabled={agentStatus !== 'idle'}><Printer className="w-4 h-4 mr-2"/>3D Print File (STL)</Button>}
-                     {visibleTools.has('software-code') && <Button size="sm" variant="outline" onClick={() => handleGenerate('software-code')} disabled={agentStatus !== 'idle'}><Code2 className="w-4 h-4 mr-2"/>Software Code</Button>}
-                     {visibleTools.has('chemical-formula') && <Button size="sm" variant="outline" onClick={() => handleGenerate('chemical-formula')} disabled={agentStatus !== 'idle'}><FlaskConical className="w-4 h-4 mr-2"/>Chemical Formula</Button>}
-                </div>
+             <h5 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">AI Visual Assets (Sync Selection)</h5>
+             <p className="text-xs text-gray-500 mb-3">Select which diagrams to keep in sync. They will auto-regenerate when text is updated.</p>
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                 {toolDefinitions.filter(t => visibleTools.has(t.type)).map(tool => {
+                     const isActive = activeAssetTypes.includes(tool.type);
+                     const hasGenerated = generatedAssets.some(a => a.type === tool.type);
+                     return (
+                         <Button 
+                             key={tool.type} 
+                             size="sm" 
+                             variant={isActive ? 'primary' : 'outline'} 
+                             onClick={() => onToggleAssetType(tool.type)}
+                             className="relative"
+                         >
+                             {isActive && <Check className="w-3 h-3 absolute top-1 right-1" />}
+                             {tool.icon} {tool.label}
+                         </Button>
+                     );
+                 })}
+             </div>
+             
+             {generatedAssets.length > 0 && (
+                 <div className="mt-4 space-y-2">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Available Visual Assets:</p>
+                    {generatedAssets.map(asset => (
+                        <div key={asset.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-charcoal-900/50 rounded-lg text-sm">
+                            <span className="truncate">{asset.name}</span>
+                            <div className="flex space-x-2">
+                                <Badge variant="info">{asset.type}</Badge>
+                                <Button size="sm" variant="ghost" className="!p-1 h-auto" title="Download" onClick={() => {
+                                     const a = document.createElement('a');
+                                     a.href = asset.content;
+                                     a.download = `${sanitizeFilename(asset.name)}`;
+                                     document.body.appendChild(a);
+                                     a.click();
+                                     document.body.removeChild(a);
+                                }}>
+                                    <Download className="w-3 h-3"/>
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                 </div>
              )}
         </div>
     );
 };
+
+const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9_.]/gi, '_').toLowerCase();

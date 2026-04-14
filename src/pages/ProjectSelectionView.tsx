@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { LogOut, Moon, Sun, Plus, Trash2, Briefcase, LoaderCircle, Upload } from 'lucide-react';
 import { Button, Card, ProgressBar } from '../components/ui';
@@ -8,14 +9,21 @@ import { Project, ToastMessage } from '../types';
 declare var JSZip: any;
 
 export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setTheme, setToast }: { onSelectProject: (project: Project) => void, onCreateNew: () => void, theme: string, setTheme: (theme: string) => void, setToast: (toast: ToastMessage) => void }) => {
-    const { currentUser, projects, logout, deleteProject, addProject } = useProject();
+    const { currentUser, projects, logout, deleteProject, deleteAllProjects, addProject } = useProject();
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+    const [isDeletingAll, setIsDeletingAll] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleDeleteProject = () => {
         if (!projectToDelete) return;
         deleteProject(projectToDelete.id);
         setProjectToDelete(null);
+    }
+
+    const handleDeleteAll = () => {
+        deleteAllProjects();
+        setIsDeletingAll(false);
+        setToast({ message: "All projects deleted successfully.", type: 'success' });
     }
 
     const handleImportClick = () => {
@@ -35,7 +43,6 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
 
             const zip = await JSZip.loadAsync(file);
             
-            // fix: Cast the file object to `any` to allow property access since JSZip types are not available.
             const stateFile = Object.values(zip.files).find((f: any) => f.name.endsWith('project_state.json'));
             
             if (!stateFile) {
@@ -45,7 +52,6 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
             const content = await (stateFile as any).async('string');
             const importedProject = JSON.parse(content) as Project;
 
-            // Sanitize and update the imported project
             const newProject: Project = {
                 ...importedProject,
                 id: crypto.randomUUID(),
@@ -66,7 +72,7 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-charcoal-900 flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen bg-gray-50 dark:bg-charcoal-900 flex flex-col items-center py-12 px-4 overflow-y-auto">
             <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
                  <Button variant="outline" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-2"/> Logout</Button>
                 <button
@@ -78,7 +84,7 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
                 </button>
             </div>
             
-            <Card className="w-full max-w-3xl">
+            <Card className="w-full max-w-3xl my-auto">
                 <div className="text-center mb-6">
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Project Workspace</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-2">
@@ -87,7 +93,7 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
                 </div>
 
                 <div>
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
                         <h2 className="text-xl font-semibold">Your Projects</h2>
                          <div className="flex items-center space-x-2">
                             <input
@@ -100,11 +106,19 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
                             <Button onClick={handleImportClick} variant="outline">
                                 <Upload className="w-4 h-4 mr-2"/>Import Archive
                             </Button>
+                            {projects.length > 0 && (
+                                <Button 
+                                    onClick={() => setIsDeletingAll(true)} 
+                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                >
+                                    <Trash2 className="w-4 h-4 mr-2"/>Delete All
+                                </Button>
+                            )}
                             <Button onClick={onCreateNew}><Plus className="w-4 h-4 mr-2"/>New Project</Button>
                         </div>
                     </div>
                     {projects.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto p-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto p-1">
                             {projects.map(p => (
                                 <div key={p.id} className="relative group">
                                     <Card 
@@ -144,6 +158,16 @@ export const ProjectSelectionView = ({ onSelectProject, onCreateNew, theme, setT
                 title={`Delete ${projectToDelete?.name}?`}
                 description="Are you sure you want to delete this project? This action is permanent and cannot be undone."
                 confirmText="Yes, Delete"
+                confirmVariant="danger"
+            />
+
+            <ConfirmationModal
+                isOpen={isDeletingAll}
+                onClose={() => setIsDeletingAll(false)}
+                onConfirm={handleDeleteAll}
+                title="Delete All Projects?"
+                description="Are you sure you want to delete ALL projects? This action is permanent and cannot be undone. This will also clear any corrupted or partial project data."
+                confirmText="Yes, Delete All"
                 confirmVariant="danger"
             />
         </div>

@@ -1,15 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { Remarkable } from 'remarkable';
 import { Play, Check, Combine, Edit3, Save, LoaderCircle, Zap, RotateCcw } from 'lucide-react';
 import { Button, Card, ModelBadge } from '../ui';
 import { GenerationError } from '../GenerationError';
-import { Project, Phase, Sprint, ToastMessage, VersionedOutput } from '../../types';
-import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel, generateDesignReviewChecklist } from '../../services/geminiService';
+import { Project, Phase, Sprint, ToastMessage, VersionedOutput, MetaDocument } from '../../types';
+import { generateSubDocument, generateCompactedContext, generatePreliminaryDesignSprints, selectModel, generateDesignReviewChecklist, generateStandardVisualAsset, generateAdvancedAsset } from '../../services/geminiService';
 import { MarkdownEditor } from '../MarkdownEditor';
 import { AttachmentManager } from '../AttachmentManager';
 import { PhaseActions } from '../PhaseActions';
 import { ToolIntegration } from '../ToolIntegration';
-import { DiagramCard } from '../DiagramCard';
 
 declare const Prism: any;
 
@@ -31,10 +31,23 @@ interface WorkflowProps {
     setExternalError: (message: string) => void;
     onGoToNext: () => void;
     onUpdateProject: (updatedProject: Project) => void;
+    onDownloadArchive: () => void;
+    isLastPhase: boolean;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseComplete, setExternalError, onGoToNext, onUpdateProject, setToast }: WorkflowProps) => {
+export const MultiDocPhaseWorkflow = ({ 
+    phase, 
+    project, 
+    onUpdatePhase, 
+    onPhaseComplete, 
+    setExternalError, 
+    onGoToNext, 
+    onUpdateProject, 
+    onDownloadArchive,
+    isLastPhase,
+    setToast 
+}: WorkflowProps) => {
     const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
     const [editingSprintId, setEditingSprintId] = useState<string | null>(null);
     const [editedSprintOutput, setEditedSprintOutput] = useState('');
@@ -55,7 +68,46 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         onUpdatePhase(phase.id, { sprints: updatedSprints });
     };
 
-    const handleSaveSprint = () => {
+    const handleSyncSprintAssets = async (sprint: Sprint, content: string) => {
+        const activeTypes = sprint.activeAssetTypes || [];
+        if (activeTypes.length === 0) return;
+
+        setToast({ message: `Synchronizing ${activeTypes.length} visual assets for ${sprint.name}...`, type: 'info' });
+        
+        let currentMetaDocs = [...(project.metaDocuments || [])];
+        
+        for (const type of activeTypes) {
+            try {
+                let asset: { content: string; docName: string };
+                // Reuse existing output structure for the service
+                const mockSprint = { ...sprint, outputs: [{ content }] } as any;
+                
+                if (['wireframe', 'diagram', 'schematic'].includes(type)) {
+                    asset = await generateStandardVisualAsset(project, mockSprint, type as any);
+                } else {
+                    asset = await generateAdvancedAsset(project, mockSprint, type as any);
+                }
+
+                currentMetaDocs = currentMetaDocs.filter(d => !(d.parentEntityId === sprint.id && d.type === type));
+
+                const newDoc: MetaDocument = {
+                    id: `meta-asset-${sprint.id}-${type}-${Date.now()}`,
+                    name: asset.docName,
+                    content: asset.content,
+                    type: type,
+                    createdAt: new Date(),
+                    parentEntityId: sprint.id
+                };
+                currentMetaDocs.push(newDoc);
+            } catch (err: any) {
+                setToast({ message: `Failed to sync ${type}: ${err.message}`, type: 'error' });
+            }
+        }
+        
+        onUpdateProject({ ...project, metaDocuments: currentMetaDocs });
+    };
+
+    const handleSaveSprint = async () => {
         if (!editingSprintId) return;
         const sprint = phase.sprints.find(s => s.id === editingSprintId);
         if (sprint) {
@@ -65,7 +117,9 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                 reason: 'Manual edit',
                 createdAt: new Date()
             };
-            handleUpdateSprint(editingSprintId, { outputs: [...sprint.outputs, newVersion] });
+            const updatedSprint = { ...sprint, outputs: [...sprint.outputs, newVersion] };
+            handleUpdateSprint(editingSprintId, { outputs: updatedSprint.outputs });
+            await handleSyncSprintAssets(updatedSprint, editedSprintOutput);
         }
         setEditingSprintId(null);
         setEditedSprintOutput('');
@@ -79,24 +133,34 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
 
         try {
             const output = await generateSubDocument(project, phase, doc);
-            const updatedSprints: Sprint[] = phase.sprints.map(d => {
-                if (d.id === docId) {
-                    const newVersion: VersionedOutput = {
-                        version: (d.outputs.length || 0) + 1,
-                        content: output,
-                        reason: 'Initial generation',
-                        createdAt: new Date(),
-                    };
-                    return { ...d, outputs: [...d.outputs, newVersion], status: 'completed' };
-                }
-                return d;
-            });
+            const newVersion: VersionedOutput = {
+                version: (doc.outputs.length || 0) + 1,
+                content: output,
+                reason: 'Initial generation',
+                createdAt: new Date(),
+            };
+            const updatedDoc = { ...doc, outputs: [...doc.outputs, newVersion], status: 'in-progress' as const };
+            
+            const updatedSprints: Sprint[] = phase.sprints.map(d => 
+                d.id === docId ? updatedDoc : d
+            );
             onUpdatePhase(phase.id, { sprints: updatedSprints });
+
+            // Sync assets
+            await handleSyncSprintAssets(updatedDoc, output);
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred during generation.');
         } finally {
             setLoadingDocId(null);
         }
+    };
+
+    const handleAcceptSprint = (docId: string) => {
+        const updatedSprints = phase.sprints.map(d => 
+            d.id === docId ? { ...d, status: 'completed' as const } : d
+        );
+        onUpdatePhase(phase.id, { sprints: updatedSprints });
+        setToast({ message: 'Sprint documentation accepted.', type: 'success' });
     };
     
     const handleMergeAndComplete = async () => {
@@ -172,6 +236,23 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
         }
     };
 
+    const handleToggleSprintAsset = async (sprintId: string, type: string) => {
+        const sprint = phase.sprints.find(s => s.id === sprintId);
+        if (!sprint) return;
+
+        const currentActive = sprint.activeAssetTypes || [];
+        const nextActive = currentActive.includes(type) 
+            ? currentActive.filter(t => t !== type)
+            : [...currentActive, type];
+        
+        handleUpdateSprint(sprintId, { activeAssetTypes: nextActive });
+
+        const latestSprintOutput = sprint.outputs[sprint.outputs.length - 1]?.content;
+        if (nextActive.includes(type) && latestSprintOutput) {
+            await handleSyncSprintAssets({ ...sprint, activeAssetTypes: nextActive }, latestSprintOutput);
+        }
+    };
+
 
     const allDocsGenerated = phase.sprints.every(d => d.status === 'completed');
     const isPreliminaryDesign = phase.name === 'Preliminary Design';
@@ -223,17 +304,7 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                         rows={2}
                                     />
                                 </div>
-                                <ToolIntegration
-                                    sprint={doc}
-                                    project={project}
-                                    onUpdateProject={onUpdateProject}
-                                    setToast={setToast}
-                                />
-                                <AttachmentManager
-                                    sprint={doc}
-                                    onUpdateAttachments={(attachments) => handleUpdateSprint(doc.id, { attachments })}
-                                />
-
+                                
                                 {doc.outputs.length > 0 && (
                                     <div className="mt-4 pt-4 border-t dark:border-charcoal-700">
                                         {editingSprintId === doc.id ? (
@@ -264,6 +335,11 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                                     <Button variant="outline" size="sm" onClick={() => { setEditingSprintId(doc.id); setEditedSprintOutput(doc.outputs[doc.outputs.length - 1]?.content || ''); }}>
                                                         <Edit3 className="mr-2 w-4 h-4" />Edit
                                                     </Button>
+                                                    {doc.status !== 'completed' && (
+                                                        <Button size="sm" onClick={() => handleAcceptSprint(doc.id)} className="bg-green-600 hover:bg-green-700 text-white">
+                                                            <Check className="mr-2 w-4 h-4" /> Accept Sprint
+                                                        </Button>
+                                                    )}
                                                 </div>
                                                 <div
                                                     className="bg-gray-50 dark:bg-charcoal-900/50 border dark:border-charcoal-700 rounded-lg p-4 max-h-64 overflow-y-auto prose dark:prose-invert max-w-none"
@@ -271,6 +347,18 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                                                 />
                                             </>
                                         )}
+
+                                        <ToolIntegration
+                                            sprint={doc}
+                                            project={project}
+                                            onUpdateProject={onUpdateProject}
+                                            onToggleAssetType={(type) => handleToggleSprintAsset(doc.id, type)}
+                                            setToast={setToast}
+                                        />
+                                        <AttachmentManager
+                                            sprint={doc}
+                                            onUpdateAttachments={(attachments) => handleUpdateSprint(doc.id, { attachments })}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -287,47 +375,30 @@ export const MultiDocPhaseWorkflow = ({ phase, project, onUpdatePhase, onPhaseCo
                     )}
                 </div>
             </Card>
-
-            {phase.outputs.length > 0 && (
-                 <DiagramCard
-                    phase={phase}
-                    project={project}
-                    onUpdatePhase={onUpdatePhase}
-                    updateProject={onUpdateProject}
-                    setExternalError={setExternalError}
-                    setToast={setToast}
-                />
-            )}
             
             <div className="mt-6">
-                {phase.status !== 'completed' ? (
-                    <div className="flex justify-end">
-                        <Button onClick={handleMergeAndComplete} disabled={!allDocsGenerated || isMerging}>
-                            {isMerging ? <LoaderCircle className="mr-2 w-4 h-4 animate-spin" /> : <Combine className="mr-2 w-4 h-4" />}
-                            Merge Documents & Complete
-                        </Button>
-                    </div>
-                ) : (
-                    <PhaseActions 
-                        phase={phase}
-                        onMarkComplete={() => {}}
-                        onDownload={() => {
-                             if (phase.outputs.length > 0) {
-                                const latestOutput = phase.outputs[phase.outputs.length - 1].content;
-                                const blob = new Blob([latestOutput], { type: 'text/markdown' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `${project.name}_${phase.name}.md`;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                            }
-                        }}
-                        onGoToNext={onGoToNext}
-                        isCompletable={false}
-                        isDownloadDisabled={phase.outputs.length === 0}
-                    />
-                )}
+                <PhaseActions 
+                    phase={phase}
+                    onMarkComplete={handleMergeAndComplete}
+                    onDownload={() => {
+                         if (phase.outputs.length > 0) {
+                            const latestOutput = phase.outputs[phase.outputs.length - 1].content;
+                            const blob = new Blob([latestOutput], { type: 'text/markdown' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${project.name}_${phase.name}.md`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        }
+                    }}
+                    onGoToNext={onGoToNext}
+                    onPackageAll={onDownloadArchive}
+                    isLastPhase={isLastPhase}
+                    isCompletable={allDocsGenerated && !isMerging}
+                    reviewRequired={phase.designReview?.required}
+                    isDownloadDisabled={phase.outputs.length === 0}
+                />
             </div>
         </>
     );

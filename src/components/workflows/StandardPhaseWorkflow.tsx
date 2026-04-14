@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
-import { generateStandardPhaseOutput, generateDesignReviewChecklist, selectModel } from '../../services/geminiService';
+import { generateStandardPhaseOutput, generateDesignReviewChecklist, selectModel, generateStandardVisualAsset, generateAdvancedAsset } from '../../services/geminiService';
 import { TuningControls } from '../TuningControls';
 import { PhaseOutput } from '../PhaseOutput';
 import { PhaseActions } from '../PhaseActions';
-import { Project, Phase, ToastMessage, VersionedOutput } from '../../types';
-import { DiagramCard } from '../DiagramCard';
+import { Project, Phase, ToastMessage, VersionedOutput, MetaDocument } from '../../types';
+import { ToolIntegration } from '../ToolIntegration';
 
 interface WorkflowProps {
     phase: Phase;
@@ -14,15 +15,68 @@ interface WorkflowProps {
     onPhaseComplete: () => void;
     setExternalError: (message: string) => void;
     onGoToNext: () => void;
+    onDownloadArchive: () => void;
+    isLastPhase: boolean;
     setToast: (toast: ToastMessage | null) => void;
 }
 
-export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateProject, onPhaseComplete, setExternalError, onGoToNext, setToast }: WorkflowProps) => {
+export const StandardPhaseWorkflow = ({ 
+    phase, 
+    project, 
+    onUpdatePhase, 
+    onUpdateProject, 
+    onPhaseComplete, 
+    setExternalError, 
+    onGoToNext, 
+    onDownloadArchive,
+    isLastPhase,
+    setToast 
+}: WorkflowProps) => {
     const [isLoading, setIsLoading] = useState(false);
     const [tuningSettings, setTuningSettings] = useState(phase.tuningSettings);
     const modelForGeneration = selectModel({ phase, tuningSettings });
 
     const latestOutput = phase.outputs[phase.outputs.length - 1]?.content;
+
+    const handleSyncAssets = async (updatedProject: Project, updatedPhase: Phase, content: string) => {
+        const activeTypes = updatedPhase.activeAssetTypes || [];
+        if (activeTypes.length === 0) return;
+
+        setToast({ message: `Synchronizing ${activeTypes.length} selected visual assets...`, type: 'info' });
+        
+        let currentMetaDocs = [...(updatedProject.metaDocuments || [])];
+        
+        for (const type of activeTypes) {
+            try {
+                let asset: { content: string; docName: string };
+                // Using a mock sprint structure for the generation services
+                const mockSprint = { name: updatedPhase.name, description: updatedPhase.description, outputs: [{ content }] } as any;
+                
+                if (['wireframe', 'diagram', 'schematic'].includes(type)) {
+                    asset = await generateStandardVisualAsset(updatedProject, mockSprint, type as any);
+                } else {
+                    asset = await generateAdvancedAsset(updatedProject, mockSprint, type as any);
+                }
+
+                // Remove existing ones of same type for this parent
+                currentMetaDocs = currentMetaDocs.filter(d => !(d.parentEntityId === updatedPhase.id && d.type === type));
+
+                const newDoc: MetaDocument = {
+                    id: `meta-asset-${updatedPhase.id}-${type}-${Date.now()}`,
+                    name: asset.docName,
+                    content: asset.content,
+                    type: type,
+                    createdAt: new Date(),
+                    parentEntityId: updatedPhase.id
+                };
+                currentMetaDocs.push(newDoc);
+            } catch (err: any) {
+                setToast({ message: `Failed to sync ${type}: ${err.message}`, type: 'error' });
+            }
+        }
+        
+        onUpdateProject({ ...updatedProject, metaDocuments: currentMetaDocs });
+    };
 
     const handleGenerate = async (reason: string) => {
         setIsLoading(true);
@@ -35,7 +89,11 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
                 reason,
                 createdAt: new Date(),
             };
-            onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion], status: 'in-progress', tuningSettings });
+            const updatedPhase = { ...phase, outputs: [...phase.outputs, newVersion], status: 'in-progress' as const, tuningSettings };
+            onUpdatePhase(phase.id, { outputs: updatedPhase.outputs, status: updatedPhase.status, tuningSettings });
+            
+            // Sync selected assets
+            await handleSyncAssets(project, updatedPhase, output);
         } catch (error: any) {
             setExternalError(error.message || 'An unknown error occurred during generation.');
         } finally {
@@ -70,14 +128,18 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
         }
     };
 
-    const handleSaveOutput = (newOutput: string, reason: string) => {
+    const handleSaveOutput = async (newOutput: string, reason: string) => {
         const newVersion: VersionedOutput = {
             version: (phase.outputs.length || 0) + 1,
             content: newOutput,
             reason,
             createdAt: new Date(),
         };
-        onUpdatePhase(phase.id, { outputs: [...phase.outputs, newVersion] });
+        const updatedPhase = { ...phase, outputs: [...phase.outputs, newVersion] };
+        onUpdatePhase(phase.id, { outputs: updatedPhase.outputs });
+        
+        // Sync selected assets
+        await handleSyncAssets(project, updatedPhase, newOutput);
     };
 
     const handleDownload = () => {
@@ -89,6 +151,21 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
             a.download = `${project.name}_${phase.name}.md`;
             a.click();
             URL.revokeObjectURL(url);
+        }
+    };
+
+    const handleToggleAsset = async (type: string) => {
+        const currentActive = phase.activeAssetTypes || [];
+        const nextActive = currentActive.includes(type) 
+            ? currentActive.filter(t => t !== type)
+            : [...currentActive, type];
+        
+        onUpdatePhase(phase.id, { activeAssetTypes: nextActive });
+
+        // If newly selected and we have text, generate it immediately
+        if (nextActive.includes(type) && latestOutput) {
+             const updatedPhase = { ...phase, activeAssetTypes: nextActive };
+             await handleSyncAssets(project, updatedPhase, latestOutput);
         }
     };
 
@@ -111,21 +188,24 @@ export const StandardPhaseWorkflow = ({ phase, project, onUpdatePhase, onUpdateP
                 apiKey={process.env.API_KEY || null}
                 modelName={modelForGeneration}
             />
+            
             {latestOutput && (
-                 <DiagramCard
+                 <ToolIntegration 
                     phase={phase}
                     project={project}
-                    onUpdatePhase={onUpdatePhase}
-                    updateProject={onUpdateProject}
-                    setExternalError={setExternalError}
+                    onUpdateProject={onUpdateProject}
+                    onToggleAssetType={handleToggleAsset}
                     setToast={setToast}
-                />
+                 />
             )}
+
             <PhaseActions
                 phase={phase}
                 onMarkComplete={handleMarkComplete}
                 onDownload={handleDownload}
                 onGoToNext={onGoToNext}
+                onPackageAll={onDownloadArchive}
+                isLastPhase={isLastPhase}
                 isCompletable={!!latestOutput && !isLoading}
                 reviewRequired={phase.designReview?.required}
                 isDownloadDisabled={!latestOutput}

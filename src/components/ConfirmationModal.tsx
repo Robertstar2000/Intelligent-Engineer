@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { Button, Card } from './ui';
 
 interface ConfirmationModalProps {
@@ -29,15 +29,22 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
     return (
         <div
-            className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4"
+            className="fixed inset-0 bg-gray-900 bg-opacity-75 flex justify-center z-[100] overflow-y-auto p-4 sm:p-10"
             onClick={onClose}
             aria-modal="true"
             role="dialog"
         >
             <Card
-                className="w-full max-w-md transform transition-all"
+                className="w-full max-w-md my-auto transform transition-all relative"
                 onClick={(e) => e.stopPropagation()}
             >
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-2 right-2 p-1 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 z-10"
+                    aria-label="Close"
+                >
+                    <X className="w-6 h-6" />
+                </button>
                 <div className="flex items-start">
                     <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 sm:mx-0 sm:h-10 sm:w-10">
                         <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
@@ -63,6 +70,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     <Button
                         variant="outline"
                         onClick={onClose}
+                        className="mt-3 sm:mt-0"
                     >
                         {cancelText}
                     </Button>

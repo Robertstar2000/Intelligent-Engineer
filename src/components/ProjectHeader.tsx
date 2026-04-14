@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { ArrowLeft, Sun, Moon, Search } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Search, Settings, Archive } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { UserSwitcher } from './UserSwitcher';
 
@@ -11,6 +12,8 @@ interface ProjectHeaderProps {
   searchQuery?: string;
   setSearchQuery?: (query: string) => void;
   onSearch?: (query: string) => void;
+  onOpenSettings?: () => void;
+  onViewDocuments?: () => void;
 }
 
 const ThemeToggleButton = ({ theme, setTheme }: { theme: string; setTheme: (theme: string) => void; }) => {
@@ -26,7 +29,7 @@ const ThemeToggleButton = ({ theme, setTheme }: { theme: string; setTheme: (them
     );
 };
 
-export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, setTheme, showBackButton = false, searchQuery, setSearchQuery, onSearch }) => {
+export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, setTheme, showBackButton = false, searchQuery, setSearchQuery, onSearch, onOpenSettings, onViewDocuments }) => {
   const { project } = useProject();
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -37,7 +40,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, s
 
   return (
     <header className="flex items-center justify-between mb-8 gap-4">
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 flex items-center gap-4">
           <button onClick={onGoHome} className="flex items-center text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white whitespace-nowrap">
             <ArrowLeft className="w-4 h-4 mr-2" /> 
             {showBackButton ? 'Back to Dashboard' : 'Back to Home'}
@@ -60,8 +63,24 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ onGoHome, theme, s
         )}
       </div>
       
-      <div className="flex items-center space-x-4 flex-shrink-0">
+      <div className="flex items-center space-x-2 flex-shrink-0">
+        {project && onViewDocuments && (
+            <button
+                onClick={onViewDocuments}
+                className="hidden md:flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-charcoal-800 transition-colors mr-2"
+            >
+                <Archive className="w-4 h-4 mr-2" />
+                Artifacts
+            </button>
+        )}
         {project && <UserSwitcher />}
+        <button
+            onClick={onOpenSettings}
+            className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-charcoal-800 focus:outline-none"
+            aria-label="Open settings"
+        >
+            <Settings className="w-5 h-5" />
+        </button>
         <ThemeToggleButton theme={theme} setTheme={setTheme} />
       </div>
     </header>
