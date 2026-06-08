@@ -67,7 +67,7 @@ export const AuthModal = ({ isOpen, onClose, setToast }: { isOpen: boolean, onCl
                 <div className="p-6">
                     <div className="text-center mb-4">
                       <BrainCircuit className="w-10 h-10 text-brand-primary mx-auto" />
-                      <h2 className="text-2xl font-bold mt-2">VibraEngineer</h2>
+                      <h2 className="text-2xl font-bold mt-2">MIFECO VibraEngineer</h2>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {!isLoginView && (

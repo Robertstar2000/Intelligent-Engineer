@@ -1,6 +1,6 @@
 
 export const FEATURES_CONTENT = `
-# VibraEngineer Features
+# MIFECO VibraEngineer Features
 
 Our platform is designed from the ground up to accelerate the engineering design process through intelligent automation and a structured, human-in-the-loop workflow.
 
@@ -32,7 +32,7 @@ Easily package and share your work.
 `;
 
 export const LIFECYCLE_CONTENT = `
-# The VibraEngineer Lifecycle
+# The MIFECO VibraEngineer Lifecycle
 
 Our platform guides your project through a structured, multi-phase lifecycle based on proven systems engineering models like the V-Model. Each phase has a specific purpose and builds upon the last.
 
@@ -76,11 +76,11 @@ The final phase looks to the future. The AI generates an **Improvement & Enhance
 `;
 
 export const ABOUT_CONTENT = `
-# About VibraEngineer
+# About MIFECO VibraEngineer
 
 ## Our Mission
 
-At VibraEngineer, our mission is to **supercharge the engineering design process** by creating an intelligent, collaborative partnership between human experts and artificial intelligence. We believe that AI should not replace engineers, but rather serve as a powerful tool to augment their creativity, handle tedious tasks, and accelerate the journey from concept to reality.
+At MIFECO VibraEngineer, our mission is to **supercharge the engineering design process** by creating an intelligent, collaborative partnership between human experts and artificial intelligence. We believe that AI should not replace engineers, but rather serve as a powerful tool to augment their creativity, handle tedious tasks, and accelerate the journey from concept to reality.
 
 ---
 
@@ -94,7 +94,7 @@ Our platform is built on a core principle we call the **Human-Mediated Agentic P
 
 ## The Technology
 
-The VibraEngineer Partner is a demonstration of what's possible with cutting-edge AI. It leverages the powerful reasoning and generation capabilities of the **Google Gemini API** within a structured, user-friendly React application. By combining a sophisticated prompt-engineering framework with a deep understanding of proven engineering methodologies, we've created a tool that is both powerful and practical.
+The MIFECO VibraEngineer Partner is a demonstration of what's possible with cutting-edge AI. It leverages the powerful reasoning and generation capabilities of the **Google Gemini API** within a structured, user-friendly React application. By combining a sophisticated prompt-engineering framework with a deep understanding of proven engineering methodologies, we've created a tool that is both powerful and practical.
 
 We are committed to pushing the boundaries of what's possible in AI-assisted engineering and are excited to be on this journey with you.
 `;

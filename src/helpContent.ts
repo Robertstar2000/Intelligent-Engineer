@@ -1,8 +1,8 @@
 
 export const HELP_CONTENT = `
-# VibraEngineer Partner - Help Guide
+# MIFECO VibraEngineer Partner - Help Guide
 
-Welcome! This guide provides everything you need to know to effectively use the VibraEngineer Partner for your projects.
+Welcome! This guide provides everything you need to know to effectively use the MIFECO VibraEngineer Partner for your projects.
 
 ## 1. Core Features
 
@@ -61,7 +61,7 @@ These phases require you to generate a series of distinct documents to complete 
 
 ### Understanding HMAP (Human-Mediated Agentic Process)
 
-The VibraEngineer Partner is built on a core philosophy called HMAP, which stands for **Human-Mediated Agentic Process**. This isn't just about having an AI write documents for you; it's a collaborative partnership where you are always in control.
+The MIFECO VibraEngineer Partner is built on a core philosophy called HMAP, which stands for **Human-Mediated Agentic Process**. This isn't just about having an AI write documents for you; it's a collaborative partnership where you are always in control.
 
 #### How it Works:
 

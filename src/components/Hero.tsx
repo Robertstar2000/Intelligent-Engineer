@@ -1,14 +1,22 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from './ui';
-import { GitBranch, FileText, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
+import { GitBranch, FileText, CheckSquare, Clock, AlertTriangle, Sparkles } from 'lucide-react';
+import { PricingModal } from './PricingModal';
 
 export const Hero = ({ onLoginClick }) => {
+  const [pricingOpen, setPricingOpen] = useState(false);
+
   return (
     <section className="py-20 md:py-32 text-center">
       <div className="container mx-auto px-4">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full bg-brand-primary/10 border border-brand-primary/30">
+          <Sparkles className="w-4 h-4 text-brand-primary" />
+          <span className="text-sm font-medium text-brand-primary">Free Tier Available</span>
+        </div>
+
         <h1 className="text-5xl md:text-7xl font-extrabold text-white leading-tight mb-4">
-          VibraEngineer
+          MIFECO VibraEngineer
         </h1>
         <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-8">
           An AI-powered companion guiding you through the full engineering lifecycle. Generate your first three foundational documents to build a strong base. Then, choose your workflow: continue manually, generating and reviewing each document, or engage the Automation Engine to draft the entire project for you to refine.
@@ -46,15 +54,30 @@ export const Hero = ({ onLoginClick }) => {
             </div>
         </div>
 
-         <Button
-          onClick={onLoginClick}
-          variant="primary"
-          size="lg"
-          className="mt-8"
-        >
-          Start New Project
-        </Button>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
+          <Button
+            onClick={onLoginClick}
+            variant="primary"
+            size="lg"
+          >
+            Start New Project
+          </Button>
+          <Button
+            onClick={() => setPricingOpen(true)}
+            variant="outline"
+            size="lg"
+            className="border-brand-primary/50 text-brand-primary hover:bg-brand-primary/10 !text-brand-primary"
+          >
+            View Pricing
+          </Button>
+        </div>
       </div>
+
+      <PricingModal
+        isOpen={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+        currentTier="free"
+      />
     </section>
   );
 };
